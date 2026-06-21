@@ -1,0 +1,8 @@
+target/
+AGENTS.md
+*.swp
+*.swo
+*.pyc
+*.o
+*.so
+*.DS_Store
