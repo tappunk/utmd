@@ -9,6 +9,7 @@ const UTM_APP: &str = "/Applications/UTM.app";
 const UTMCTL: &str = "/usr/local/bin/utmctl";
 const TEMPLATE_LINUX: &str = "[t]-linux";
 const TEMPLATE_MACOS: &str = "[t]-macos";
+const PREFIX: &str = "utmd-";
 
 #[derive(Parser)]
 #[command(
@@ -29,7 +30,7 @@ enum Commands {
         #[arg(value_enum, value_name = "OS")]
         os_type: OsType,
 
-        /// Custom VM name (auto-generated if omitted)
+        /// Custom VM name (will be automatically prefixed with "utmd-")
         name: Option<String>,
     },
     /// Delete all generated sandbox VMs
@@ -112,13 +113,24 @@ async fn handle_clone(os_type: OsType, custom_name: Option<String>) -> Result<()
     let template = os_type.template();
 
     let new_name = match custom_name {
-        Some(name) => name,
+        Some(name) => {
+            if name.starts_with(PREFIX) {
+                name
+            } else {
+                format!("{}{}", PREFIX, name)
+            }
+        }
         None => {
             let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
             let mut hasher = Md5::new();
             hasher.update(nanos.to_string().as_bytes());
             let hash_str = format!("{:x}", hasher.finalize());
-            format!("{:?}-{:.4}", os_type, hash_str).to_lowercase()
+            format!(
+                "{}{}-{:.4}",
+                PREFIX,
+                format!("{:?}", os_type).to_lowercase(),
+                hash_str
+            )
         }
     };
 
@@ -169,7 +181,10 @@ async fn handle_clone(os_type: OsType, custom_name: Option<String>) -> Result<()
 }
 
 async fn handle_delete_all() -> Result<()> {
-    eprintln!("warning: this will stop and permanently delete all generated sandbox vms");
+    eprintln!(
+        "warning: this will stop and permanently delete all sandbox vms prefixed with '{}'",
+        PREFIX
+    );
     let confirm = Confirm::new()
         .with_prompt("Are you absolutely sure?")
         .default(false)
@@ -197,10 +212,7 @@ async fn handle_delete_all() -> Result<()> {
         {
             let vm_name = line[idx..].trim().to_string();
 
-            if !matches!(
-                vm_name.as_str(),
-                "[t]-linux" | "[t]-macos" | "template-linux" | "template-macos"
-            ) {
+            if vm_name.starts_with(PREFIX) {
                 guest_vms.push(vm_name);
             }
         }

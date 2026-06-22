@@ -7,7 +7,7 @@
 
 Disposable VM sandbox manager for UTM on macOS.
 
-Clone base templates into isolated development environments and delete them with a single command.
+Clone base templates into isolated development environments prefixed with `utmd-`. Delete all sandboxes with a single command while leaving personal VMs untouched.
 
 ## Prerequisites
 
@@ -17,11 +17,11 @@ Clone base templates into isolated development environments and delete them with
 ## Usage
 
 ```bash
-utmd clone linux              # Clone from [t]-linux (auto-generated name)
-utmd clone macos              # Clone from [t]-macos (auto-generated name)
-utmd clone linux sandbox1     # Clone with a custom name
+utmd clone linux              # Clone from [t]-linux (name: utmd-linux-<hash>)
+utmd clone macos              # Clone from [t]-macos (name: utmd-macos-<hash>)
+utmd clone linux sandbox1     # Clone with custom name (becomes utmd-sandbox1)
 
-utmd delete-all               # Delete all generated sandbox VMs
+utmd delete-all               # Delete all VMs prefixed with "utmd-"
 ```
 
 List all VMs in UTM:
