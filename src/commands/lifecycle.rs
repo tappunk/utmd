@@ -24,7 +24,6 @@ pub fn list(args: ListArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
                 .get(&vm.name)
                 .and_then(|m| m.os.as_deref())
                 .is_some_and(|value| value == os_value)
-                || vm.name.contains(&format!("-{}-", os_value))
         });
     }
 

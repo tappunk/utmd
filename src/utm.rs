@@ -113,7 +113,7 @@ fn parse_list_line(line: &str) -> Option<(Option<String>, String)> {
     }
 
     if columns.len() == 1 {
-        return Some((None, columns[0].to_string()));
+        return None;
     }
 
     if columns.len() == 2 {
@@ -191,6 +191,12 @@ mod tests {
     #[test]
     fn ignore_header_line() {
         let line = "UUID STATUS NAME";
+        assert!(parse_list_line(line).is_none());
+    }
+
+    #[test]
+    fn ignore_single_column_line() {
+        let line = "unauthorized";
         assert!(parse_list_line(line).is_none());
     }
 }

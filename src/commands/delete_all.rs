@@ -40,10 +40,7 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
     candidates.retain(|vm| vm.name.starts_with(&prefix));
 
     if let Some(os) = &os_filter {
-        candidates.retain(|vm| {
-            vm.os.as_deref().is_some_and(|value| value == os)
-                || vm.name.contains(&format!("-{}-", os))
-        });
+        candidates.retain(|vm| vm.os.as_deref().is_some_and(|value| value == os));
     }
 
     if let Some(age) = older_than {
