@@ -33,7 +33,7 @@ if [[ -z "$CARGO_TOKEN" ]]; then
 	CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
 	for credential_file in "$CARGO_HOME_DIR/credentials.toml" "$CARGO_HOME_DIR/credentials"; do
 		if [[ -f "$credential_file" ]]; then
-			CARGO_TOKEN=$(awk -F'"' '/^token\s*=\s*"/ {print $2; exit}' "$credential_file")
+			CARGO_TOKEN=$(awk -F'"' '/^\s*token\s*=\s*"/ {print $2; exit}' "$credential_file")
 			if [[ -n "$CARGO_TOKEN" ]]; then
 				break
 			fi
