@@ -157,5 +157,7 @@ On first run, `utmd` checks for `utmctl` and reports a dependency error when it 
 Run the local verification gate before releases:
 
 ```bash
-./scripts/verify.sh
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
 ```

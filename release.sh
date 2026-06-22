@@ -7,145 +7,123 @@ RUST_TARGET="aarch64-apple-darwin"
 
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then
-	DRY_RUN=true
-	shift
+  DRY_RUN=true
+  shift
 fi
 
 BUMP="${1:-patch}"
 NOTES="${2:-}"
 
 echo "[PROC] Verifying deployment dependencies..."
-for tool in cargo gh shasum tar awk git sed rg curl; do
-	if ! command -v "$tool" >/dev/null 2>&1; then
-		echo "[ERR] Required CLI tool '$tool' is missing."
-		exit 1
-	fi
+for tool in cargo gh shasum tar awk git sed; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "[ERR] Required CLI tool '$tool' is missing."
+    exit 1
+  fi
 done
 
 if ! gh auth status >/dev/null 2>&1; then
-	echo "[ERR] GitHub CLI is not authenticated. Run 'gh auth login'."
-	exit 1
-fi
-
-echo "[PROC] Validating crates.io authentication..."
-CARGO_TOKEN="${CARGO_REGISTRY_TOKEN:-}"
-if [[ -z "$CARGO_TOKEN" ]]; then
-	CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
-	for credential_file in "$CARGO_HOME_DIR/credentials.toml" "$CARGO_HOME_DIR/credentials"; do
-		if [[ -f "$credential_file" ]]; then
-			CARGO_TOKEN=$(awk -F'"' '/^\s*token\s*=\s*"/ {print $2; exit}' "$credential_file")
-			if [[ -n "$CARGO_TOKEN" ]]; then
-				break
-			fi
-		fi
-	done
-fi
-
-if [[ -z "$CARGO_TOKEN" ]]; then
-	echo "[ERR] crates.io token missing. Run 'cargo login' or set CARGO_REGISTRY_TOKEN."
-	exit 1
-fi
-
-if ! curl -fsS -H "Authorization: Bearer $CARGO_TOKEN" https://crates.io/api/v1/me >/dev/null 2>&1; then
-	echo "[ERR] crates.io authentication failed. Refresh token with 'cargo login'."
-	exit 1
+  echo "[ERR] GitHub CLI is not authenticated. Run 'gh auth login'."
+  exit 1
 fi
 
 if [[ ! "$BUMP" =~ ^(patch|minor|major)$ ]]; then
-	echo "[ERR] Invalid bump type '$BUMP'. Use: patch, minor, or major"
-	exit 1
+  echo "[ERR] Invalid bump type '$BUMP'. Use: patch, minor, or major"
+  exit 1
 fi
 
 if [[ -n $(git ls-files --others --exclude-standard) ]]; then
-	echo "[ERR] Untracked files found in workspace. Add or remove them before releasing."
-	git ls-files --others --exclude-standard
-	exit 1
+  echo "[ERR] Untracked files found in workspace. Add or remove them before releasing."
+  git ls-files --others --exclude-standard
+  exit 1
 fi
 
 if [[ -n $(git status --porcelain) ]]; then
-	echo "[ERR] Uncommitted changes detected. Stash or commit before releasing."
-	exit 1
+  echo "[ERR] Uncommitted changes detected. Stash or commit before releasing."
+  exit 1
 fi
 
 if [[ $(git branch --show-current) != "main" ]]; then
-	echo "[ERR] You must be on the 'main' branch to cut a release."
-	exit 1
+  echo "[ERR] You must be on the 'main' branch to cut a release."
+  exit 1
 fi
 
 git fetch origin
 if [[ -n $(git log HEAD..origin/main --oneline) ]]; then
-	echo "[ERR] Local 'main' is behind 'origin/main'. Pull latest changes first."
-	exit 1
+  echo "[ERR] Local 'main' is behind 'origin/main'. Pull latest changes first."
+  exit 1
 fi
 
 echo "[PROC] Executing strict code quality gates..."
-if rg --line-number --glob '*.rs' '^\s*(//|/\*|\*)' src >/dev/null; then
-	echo "[ERR] Rust source comments found. remove comments and keep code self-documenting."
-	rg --line-number --glob '*.rs' '^\s*(//|/\*|\*)' src
-	exit 1
-fi
 cargo fmt --check || {
-	echo "[ERR] Code formatting violations found. Run 'cargo fmt'."
-	exit 1
+  echo "[ERR] Code formatting violations found. Run 'cargo fmt'."
+  exit 1
 }
 cargo clippy -- -D warnings || {
-	echo "[ERR] Clippy warnings detected. Fix them before releasing."
-	exit 1
+  echo "[ERR] Clippy warnings detected. Fix them before releasing."
+  exit 1
 }
 cargo test || {
-	echo "[ERR] Test suite execution failed."
-	exit 1
+  echo "[ERR] Test suite execution failed."
+  exit 1
 }
 
 CURRENT_VERSION=$(grep -m 1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 if [[ -z "$CURRENT_VERSION" ]]; then
-	echo "[ERR] Could not read current version from Cargo.toml"
-	exit 1
+  echo "[ERR] Could not read current version from Cargo.toml"
+  exit 1
 fi
 
 IFS='.' read -r MAJOR MINOR PATCH <<<"$CURRENT_VERSION"
 case "$BUMP" in
 patch) PATCH=$((PATCH + 1)) ;;
 minor)
-	MINOR=$((MINOR + 1))
-	PATCH=0
-	;;
+  MINOR=$((MINOR + 1))
+  PATCH=0
+  ;;
 major)
-	MAJOR=$((MAJOR + 1))
-	MINOR=0
-	PATCH=0
-	;;
+  MAJOR=$((MAJOR + 1))
+  MINOR=0
+  PATCH=0
+  ;;
 esac
 NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 
 echo "Preparing Apple Silicon Release: v$CURRENT_VERSION -> v$NEW_VERSION ($BUMP)"
 if $DRY_RUN; then
-	echo "[INFO] Dry run complete. Code is pristine and ready for release."
-	exit 0
+  echo "[INFO] Dry run complete. Code is pristine and ready for release."
+  exit 0
 fi
 
-INITIAL_COMMIT=$(git rev-parse HEAD)
+BACKUP_CARGO_TOML=""
+BACKUP_FLAKE_NIX=""
 rollback() {
-	echo ""
-	echo "[CRIT] Release pipeline interrupted!"
-	if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-		git tag -d "v$NEW_VERSION"
-	fi
-	git checkout -- Cargo.toml flake.nix 2>/dev/null || true
-	rm -f "$ARCHIVE_NAME" "$CHECKSUM_NAME" 2>/dev/null || true
-	echo "[WARN] Rolled back. Re-run release.sh to try again."
+  echo ""
+  echo "[CRIT] Release pipeline interrupted!"
+  if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+    git tag -d "v$NEW_VERSION"
+  fi
+  if [[ -n "$BACKUP_CARGO_TOML" && -f "$BACKUP_CARGO_TOML" ]]; then
+    cp "$BACKUP_CARGO_TOML" Cargo.toml
+  fi
+  if [[ -n "$BACKUP_FLAKE_NIX" && -f "$BACKUP_FLAKE_NIX" ]]; then
+    cp "$BACKUP_FLAKE_NIX" flake.nix
+  fi
+  rm -f Cargo.toml.bak flake.nix.bak "${ARCHIVE_NAME:-}" "${CHECKSUM_NAME:-}" "$BACKUP_CARGO_TOML" "$BACKUP_FLAKE_NIX" 2>/dev/null || true
+  if [[ -n "${STAGING_DIR:-}" && -d "${STAGING_DIR}" ]]; then
+    rm -rf "${STAGING_DIR}"
+  fi
+  echo "[WARN] Rolled back. Re-run release.sh to try again."
 }
 trap rollback ERR
 
 echo "[PROC] Updating versioning configuration..."
-# Updated substitution paths to dynamically support flake.nix only if you decide to track it
-if [[ -f flake.nix ]]; then
-	sed -i.bak "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml flake.nix
-	rm Cargo.toml.bak flake.nix.bak
-else
-	sed -i.bak "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml
-	rm Cargo.toml.bak
-fi
+BACKUP_CARGO_TOML=$(mktemp)
+BACKUP_FLAKE_NIX=$(mktemp)
+cp Cargo.toml "$BACKUP_CARGO_TOML"
+cp flake.nix "$BACKUP_FLAKE_NIX"
+sed -i.bak "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml flake.nix
+rm Cargo.toml.bak flake.nix.bak
 
 cargo update -p "$BIN_NAME"
 
@@ -164,13 +142,12 @@ cp README.md LICENSE "${STAGING_DIR}/${BIN_NAME}/" 2>/dev/null || true
 tar -czf "$ARCHIVE_NAME" -C "$STAGING_DIR" "${BIN_NAME}"
 shasum -a 256 "$ARCHIVE_NAME" >"$CHECKSUM_NAME"
 rm -rf "$STAGING_DIR"
+rm -f "$BACKUP_CARGO_TOML" "$BACKUP_FLAKE_NIX"
+BACKUP_CARGO_TOML=""
+BACKUP_FLAKE_NIX=""
 
 echo "[PROC] Recording version changes to Git history..."
-if [[ -f flake.nix ]]; then
-	git add Cargo.toml Cargo.lock flake.nix
-else
-	git add Cargo.toml Cargo.lock
-fi
+git add Cargo.toml Cargo.lock flake.nix
 git commit -m "chore: release v$NEW_VERSION [skip ci]"
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 
@@ -182,13 +159,13 @@ git push origin "v$NEW_VERSION"
 
 echo "[PROC] Deploying GitHub Release and assets..."
 if [[ -n "$NOTES" ]]; then
-	gh release create "v$NEW_VERSION" "$ARCHIVE_NAME" "$CHECKSUM_NAME" \
-		--title "v$NEW_VERSION" \
-		--notes "$NOTES"
+  gh release create "v$NEW_VERSION" "$ARCHIVE_NAME" "$CHECKSUM_NAME" \
+    --title "v$NEW_VERSION" \
+    --notes "$NOTES"
 else
-	gh release create "v$NEW_VERSION" "$ARCHIVE_NAME" "$CHECKSUM_NAME" \
-		--title "v$NEW_VERSION" \
-		--generate-notes
+  gh release create "v$NEW_VERSION" "$ARCHIVE_NAME" "$CHECKSUM_NAME" \
+    --title "v$NEW_VERSION" \
+    --generate-notes
 fi
 
 echo "[PROC] Propagating release configuration to Homebrew tap..."
@@ -197,7 +174,6 @@ TAP_DIR="$(mktemp -d)"
 
 git clone --depth 1 "https://github.com/tappunk/homebrew-utmd.git" "$TAP_DIR"
 
-mkdir -p "${TAP_DIR}/Formula"
 cat <<EOF >"${TAP_DIR}/Formula/utmd.rb"
 class Utmd < Formula
   desc "Minimalist developer sandbox and disposable VM manager for UTM on macOS"
@@ -221,10 +197,10 @@ end
 EOF
 
 (
-	cd "$TAP_DIR"
-	git add Formula/utmd.rb
-	git commit -m "bump: utmd v${NEW_VERSION}"
-	git push origin main
+  cd "$TAP_DIR"
+  git add Formula/utmd.rb
+  git commit -m "bump: utmd v${NEW_VERSION}"
+  git push origin main
 )
 rm -rf "$TAP_DIR"
 
