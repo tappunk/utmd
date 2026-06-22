@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use color_eyre::{Result, eyre::bail};
 use dialoguer::Confirm;
 use md5::{Digest, Md5};
 use std::process::{Command, Stdio};
@@ -51,7 +52,9 @@ impl OsType {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
+    color_eyre::install()?;
+
     ensure_utmctl()?;
 
     let cli = Cli::parse();
@@ -68,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ensure_utmctl() -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_utmctl() -> Result<()> {
     if which::which(UTMCTL).is_ok()
         || Command::new("command")
             .args(["-v", "utmctl"])
@@ -79,15 +82,14 @@ fn ensure_utmctl() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    eprintln!("utmctl not found. Creating symlink...");
+    eprintln!("error: utmctl not found. creating symlink...");
     let proceed = Confirm::new()
         .with_prompt("Create symlink now? (requires sudo)")
         .default(true)
         .interact()?;
 
     if !proceed {
-        eprintln!("Aborted.");
-        std::process::exit(1);
+        bail!("aborted by user");
     }
 
     let status = Command::new("sudo")
@@ -100,17 +102,13 @@ fn ensure_utmctl() -> Result<(), Box<dyn std::error::Error>> {
         .status()?;
 
     if !status.success() {
-        eprintln!("[ERROR] Failed to create symlink via sudo.");
-        std::process::exit(1);
+        bail!("failed to create symlink via sudo");
     }
-    println!("[OK] Symlink created.");
+    eprintln!("info: symlink created");
     Ok(())
 }
 
-async fn handle_clone(
-    os_type: OsType,
-    custom_name: Option<String>,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_clone(os_type: OsType, custom_name: Option<String>) -> Result<()> {
     let template = os_type.template();
 
     let new_name = match custom_name {
@@ -127,26 +125,21 @@ async fn handle_clone(
     let list_output = Command::new("utmctl").arg("list").output()?;
     let list_str = String::from_utf8_lossy(&list_output.stdout);
     if !list_str.contains(template) {
-        eprintln!(
-            "Error: Template '{}' not found in utmctl registry.",
-            template
-        );
-        std::process::exit(1);
+        bail!("template '{}' not found in utmctl registry", template);
     }
 
-    println!("Cloning '{}' to '{}'...", template, new_name);
+    eprintln!("info: cloning '{}' to '{}'", template, new_name);
 
     let clone_status = Command::new("utmctl")
         .args(["clone", template, "--name", &new_name])
         .status()?;
 
     if !clone_status.success() {
-        eprintln!("Error: Failed to clone VM.");
-        std::process::exit(1);
+        bail!("failed to clone VM");
     }
-    println!("[OK] Clone completed successfully");
+    eprintln!("info: clone completed successfully");
 
-    println!("Randomizing network MAC address...");
+    eprintln!("info: randomizing network mac address...");
     let mac_script = format!(
         "tell application \"UTM\" to set address of item 1 of network interfaces of virtual machine named \"{}\" to \"\"",
         new_name
@@ -157,7 +150,7 @@ async fn handle_clone(
         .stderr(Stdio::null())
         .status();
 
-    println!("Launching and starting '{}'...", new_name);
+    eprintln!("info: launching and starting '{}'", new_name);
     let boot_script = format!(
         "tell application \"UTM\"\nactivate\nstart virtual machine named \"{}\"\nend tell",
         new_name
@@ -166,28 +159,28 @@ async fn handle_clone(
         .args(["-e", &boot_script])
         .status();
 
-    println!(
-        "[OK] '{}' is booting directly into the GUI layout.",
+    eprintln!(
+        "info: '{}' is booting directly into the gui layout",
         new_name
     );
-    println!("\nUseful commands:\n   utmctl list\n   utmd delete-all");
+    eprintln!("\nuseful commands:\n   utmctl list\n   utmd delete-all");
 
     Ok(())
 }
 
-async fn handle_delete_all() -> Result<(), Box<dyn std::error::Error>> {
-    eprintln!("[WARN] This will stop and permanently delete all generated sandbox VMs.");
+async fn handle_delete_all() -> Result<()> {
+    eprintln!("warning: this will stop and permanently delete all generated sandbox vms");
     let confirm = Confirm::new()
         .with_prompt("Are you absolutely sure?")
         .default(false)
         .interact()?;
 
     if !confirm {
-        println!("Aborted.");
+        eprintln!("info: aborted");
         return Ok(());
     }
 
-    println!("Fetching generated VM list...");
+    eprintln!("info: fetching generated vm list...");
     let output = Command::new("utmctl").arg("list").output()?;
     let output_str = String::from_utf8_lossy(&output.stdout);
 
@@ -217,16 +210,16 @@ async fn handle_delete_all() -> Result<(), Box<dyn std::error::Error>> {
     guest_vms.dedup();
 
     if guest_vms.is_empty() {
-        println!("[OK] No generated VMs found. Workspace is already clean.");
+        eprintln!("info: no generated vms found. workspace is already clean");
         return Ok(());
     }
 
-    println!(
-        "Found {} unique sandbox VM(s) to clear out.",
+    eprintln!(
+        "info: found {} unique sandbox vm(s) to clear out",
         guest_vms.len()
     );
     for vm in guest_vms {
-        println!("Processing '{}'", vm);
+        eprintln!("info: processing '{}'", vm);
         let _ = Command::new("utmctl")
             .args(["stop", &vm])
             .stderr(Stdio::null())
@@ -234,13 +227,13 @@ async fn handle_delete_all() -> Result<(), Box<dyn std::error::Error>> {
 
         let delete_status = Command::new("utmctl").args(["delete", &vm]).status()?;
         if delete_status.success() {
-            println!("[OK] Deleted successfully.");
+            eprintln!("info: deleted successfully");
         } else {
-            eprintln!("[ERROR] Failed to delete '{}'.", vm);
+            eprintln!("error: failed to delete '{}'", vm);
         }
     }
 
-    println!("[OK] Workspace sweep finished.");
+    eprintln!("info: workspace sweep finished");
     Ok(())
 }
 
