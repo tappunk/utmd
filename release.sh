@@ -46,7 +46,7 @@ if [[ -z "$CARGO_TOKEN" ]]; then
 	exit 1
 fi
 
-if ! curl -fsS -H "Authorization: $CARGO_TOKEN" https://crates.io/api/v1/me >/dev/null 2>&1; then
+if ! curl -fsS -H "Authorization: Bearer $CARGO_TOKEN" https://crates.io/api/v1/me >/dev/null 2>&1; then
 	echo "[ERR] crates.io authentication failed. Refresh token with 'cargo login'."
 	exit 1
 fi
