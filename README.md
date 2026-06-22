@@ -9,6 +9,16 @@ Disposable VM sandbox manager for UTM on macOS.
 
 Clone base templates into isolated development environments prefixed with `utmd-`. Delete all sandboxes with a single command while leaving personal VMs untouched.
 
+Global flags for automation and scripting:
+
+```bash
+--json      # machine-readable command response
+--quiet     # suppress info logs in human mode
+--yes       # skip confirmations for destructive actions
+--dry-run   # show actions without mutating state
+--config    # custom config file path
+```
+
 ## Prerequisites
 
 - macOS with [UTM Desktop Application](https://mac.getutm.app/) installed
@@ -17,17 +27,100 @@ Clone base templates into isolated development environments prefixed with `utmd-
 ## Usage
 
 ```bash
-utmd clone linux              # Clone from [t]-linux (name: utmd-linux-<hash>)
-utmd clone macos              # Clone from [t]-macos (name: utmd-macos-<hash>)
-utmd clone linux sandbox1     # Clone with custom name (becomes utmd-sandbox1)
+utmd clone linux
+utmd clone macos
+utmd clone linux --name sandbox1
+utmd clone linux --name exact-name --name-exact
+utmd clone linux --name-template "{prefix}{os}-{date}-{rand}"
 
-utmd delete-all               # Delete all VMs prefixed with "utmd-"
+utmd list                              # lists VMs using configured default_prefix
+utmd list --prefix ""                  # list all VMs
+utmd status utmd-linux-abc123
+utmd start utmd-linux-abc123
+utmd stop utmd-linux-abc123
+utmd open utmd-linux-abc123
+utmd delete utmd-linux-abc123
+
+utmd delete-all
+utmd delete-all --prefix utmd- --os linux --older-than 24h --dry-run
+utmd --yes delete-all --prefix utmd-
 ```
 
-List all VMs in UTM:
+`delete-all --older-than` currently supports `h` (hours) and `d` (days), for example `24h` and `7d`.
+
+## Config
+
+Default config path:
 
 ```bash
-utmctl list
+~/.config/utmd/config.toml
+```
+
+Example:
+
+```toml
+utm_app = "/Applications/UTM.app"
+utmctl_path = "/usr/local/bin/utmctl"
+state_path = "/Users/you/Library/Application Support/utmd/state.json"
+default_prefix = "utmd-"
+
+[templates]
+linux = "[t]-linux"
+macos = "[t]-macos"
+
+[naming]
+default_template = "{prefix}{os}-{date}-{rand}"
+rand_len = 6
+max_retries = 8
+
+[output]
+default_json = false
+default_quiet = false
+```
+
+Environment overrides:
+
+```bash
+UTMD_UTM_APP
+UTMD_UTMCTL_PATH
+UTMD_STATE_PATH
+UTMD_PREFIX
+UTMD_TEMPLATE_LINUX
+UTMD_TEMPLATE_MACOS
+UTMD_JSON
+UTMD_QUIET
+```
+
+Precedence:
+
+```bash
+CLI > environment > config file > built-in defaults
+```
+
+## JSON output
+
+All commands return wrapped JSON with a stable top-level shape:
+
+```json
+{
+  "command": "list",
+  "ok": true,
+  "data": [],
+  "warnings": [],
+  "error": null
+}
+```
+
+Exit codes:
+
+```bash
+0  success
+2  invalid usage or validation
+3  dependency missing
+4  not found
+5  conflict
+6  partial failure
+10 external command failure
 ```
 
 ## Installation
@@ -55,4 +148,12 @@ cargo build --release
 sudo cp target/release/utmd /usr/local/bin/utmd
 ```
 
-On first run, `utmd` checks for `utmctl` and offers to create a symlink if it is not found.
+On first run, `utmd` checks for `utmctl` and reports a dependency error when it is unavailable.
+
+## Local Verification
+
+Run the local verification gate before releases:
+
+```bash
+./scripts/verify.sh
+```

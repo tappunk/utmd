@@ -15,7 +15,7 @@ BUMP="${1:-patch}"
 NOTES="${2:-}"
 
 echo "[PROC] Verifying deployment dependencies..."
-for tool in cargo gh shasum tar awk git sed; do
+for tool in cargo gh shasum tar awk git sed rg curl; do
 	if ! command -v "$tool" >/dev/null 2>&1; then
 		echo "[ERR] Required CLI tool '$tool' is missing."
 		exit 1
@@ -24,6 +24,30 @@ done
 
 if ! gh auth status >/dev/null 2>&1; then
 	echo "[ERR] GitHub CLI is not authenticated. Run 'gh auth login'."
+	exit 1
+fi
+
+echo "[PROC] Validating crates.io authentication..."
+CARGO_TOKEN="${CARGO_REGISTRY_TOKEN:-}"
+if [[ -z "$CARGO_TOKEN" ]]; then
+	CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
+	for credential_file in "$CARGO_HOME_DIR/credentials.toml" "$CARGO_HOME_DIR/credentials"; do
+		if [[ -f "$credential_file" ]]; then
+			CARGO_TOKEN=$(awk -F'"' '/^token\s*=\s*"/ {print $2; exit}' "$credential_file")
+			if [[ -n "$CARGO_TOKEN" ]]; then
+				break
+			fi
+		fi
+	done
+fi
+
+if [[ -z "$CARGO_TOKEN" ]]; then
+	echo "[ERR] crates.io token missing. Run 'cargo login' or set CARGO_REGISTRY_TOKEN."
+	exit 1
+fi
+
+if ! curl -fsS -H "Authorization: $CARGO_TOKEN" https://crates.io/api/v1/me >/dev/null 2>&1; then
+	echo "[ERR] crates.io authentication failed. Refresh token with 'cargo login'."
 	exit 1
 fi
 
@@ -55,6 +79,11 @@ if [[ -n $(git log HEAD..origin/main --oneline) ]]; then
 fi
 
 echo "[PROC] Executing strict code quality gates..."
+if rg --line-number --glob '*.rs' '^\s*(//|/\*|\*)' src >/dev/null; then
+	echo "[ERR] Rust source comments found. remove comments and keep code self-documenting."
+	rg --line-number --glob '*.rs' '^\s*(//|/\*|\*)' src
+	exit 1
+fi
 cargo fmt --check || {
 	echo "[ERR] Code formatting violations found. Run 'cargo fmt'."
 	exit 1
