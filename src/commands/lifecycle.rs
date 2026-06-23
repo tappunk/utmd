@@ -35,7 +35,7 @@ pub fn list(args: ListArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     }
 
     if reporter.is_json() {
-        reporter.print_json(&CommandResponse::success("list", vms))?;
+        reporter.print_json(&CommandResponse::success("ls", vms))?;
     } else {
         for vm in vms {
             reporter.print_stdout(&vm.name);
@@ -59,7 +59,7 @@ pub fn status(args: NameArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Res
 
     if let Some(vm) = found {
         if reporter.is_json() {
-            reporter.print_json(&CommandResponse::success("status", vm))?;
+            reporter.print_json(&CommandResponse::success("inspect", vm))?;
         } else {
             reporter.print_stdout(&vm.name);
         }
@@ -68,7 +68,7 @@ pub fn status(args: NameArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Res
 
     let msg = format!("vm '{}' not found", args.name);
     if reporter.is_json() {
-        reporter.print_json(&CommandResponse::<OperationResult>::failure("status", msg))?;
+        reporter.print_json(&CommandResponse::<OperationResult>::failure("inspect", msg))?;
     } else {
         reporter.error(&msg);
     }
@@ -87,13 +87,13 @@ pub fn open(args: NameArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     if cfg.dry_run {
         let result = OperationResult {
             ok: true,
-            action: "open".to_string(),
+            action: "show".to_string(),
             target: Some(args.name.clone()),
-            message: format!("dry-run: would open '{}'", args.name),
+            message: format!("dry-run: would show '{}'", args.name),
             warnings: Vec::new(),
         };
         if reporter.is_json() {
-            reporter.print_json(&CommandResponse::success("open", result))?;
+            reporter.print_json(&CommandResponse::success("show", result))?;
         } else {
             reporter.info(&result.message);
         }
@@ -103,7 +103,7 @@ pub fn open(args: NameArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     if let Err(err) = utm::open_vm(&args.name) {
         if reporter.is_json() {
             reporter.print_json(&CommandResponse::<OperationResult>::failure(
-                "open",
+                "show",
                 format!("{}", err),
             ))?;
         } else {
@@ -113,15 +113,15 @@ pub fn open(args: NameArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     }
     let result = OperationResult {
         ok: true,
-        action: "open".to_string(),
+        action: "show".to_string(),
         target: Some(args.name),
-        message: "open succeeded".to_string(),
+        message: "show succeeded".to_string(),
         warnings: Vec::new(),
     };
     if reporter.is_json() {
-        reporter.print_json(&CommandResponse::success("open", result))?;
+        reporter.print_json(&CommandResponse::success("show", result))?;
     } else {
-        reporter.info("open succeeded");
+        reporter.info("show succeeded");
     }
 
     Ok(ExitCode::Success)
@@ -139,7 +139,7 @@ pub fn delete(args: DeleteArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
         }
     }
 
-    let code = mutate_vm("delete", &args.name, cfg, reporter, utm::delete_vm)?;
+    let code = mutate_vm("rm", &args.name, cfg, reporter, utm::delete_vm)?;
     if matches!(code, ExitCode::Success) && !cfg.dry_run {
         state::remove_vm(&cfg.state_path, &args.name)?;
     }

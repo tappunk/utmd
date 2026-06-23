@@ -24,20 +24,30 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     #[command(
-        about = "clone a new sandbox VM from a template",
-        after_help = "examples:\n  utmd clone linux\n  utmd clone linux --name sandbox1\n  utmd clone macos --name-template \"{prefix}{os}-{date}-{rand}\""
+        about = "create a new sandbox VM from a template",
+        after_help = "examples:\n  utmd create linux\n  utmd create linux --name sandbox1\n  utmd create macos --name-template \"{prefix}{os}-{rand}\""
     )]
-    Clone(CloneArgs),
+    Create(CloneArgs),
+    #[command(
+        about = "create, start, and show a sandbox VM",
+        after_help = "examples:\n  utmd run linux\n  utmd run macos\n  utmd run linux --name dev --name-template \"{prefix}{os}-{rand}\""
+    )]
+    Run(CloneArgs),
+    #[command(
+        about = "create a boilerplate config file",
+        after_help = "examples:\n  utmd init\n  utmd --config /tmp/utmd.toml init\n  utmd init --force"
+    )]
+    Init(InitArgs),
     #[command(
         about = "list managed or filtered VMs",
-        after_help = "examples:\n  utmd list\n  utmd list --prefix \"\"\n  utmd list --prefix utmd- --os linux"
+        after_help = "examples:\n  utmd ls\n  utmd ls --prefix \"\"\n  utmd ls --prefix utmd- --os linux"
     )]
-    List(ListArgs),
+    Ls(ListArgs),
     #[command(
-        about = "show details for a VM",
-        after_help = "examples:\n  utmd status utmd-linux-abc123"
+        about = "inspect details for a VM",
+        after_help = "examples:\n  utmd inspect utmd-linux-abc123"
     )]
-    Status(NameArgs),
+    Inspect(NameArgs),
     #[command(
         about = "start a VM",
         after_help = "examples:\n  utmd start utmd-linux-abc123\n  utmd --dry-run start utmd-linux-abc123"
@@ -49,20 +59,20 @@ pub enum Commands {
     )]
     Stop(NameArgs),
     #[command(
-        about = "open a VM in the UTM app",
-        after_help = "examples:\n  utmd open utmd-linux-abc123"
+        about = "show a VM in the UTM app",
+        after_help = "examples:\n  utmd show utmd-linux-abc123"
     )]
-    Open(NameArgs),
+    Show(NameArgs),
     #[command(
-        about = "delete a single VM",
-        after_help = "examples:\n  utmd delete utmd-linux-abc123\n  utmd --yes delete utmd-linux-abc123"
+        about = "remove a single VM",
+        after_help = "examples:\n  utmd rm utmd-linux-abc123\n  utmd --yes rm utmd-linux-abc123"
     )]
-    Delete(DeleteArgs),
+    Rm(DeleteArgs),
     #[command(
-        about = "delete multiple VMs by filters",
-        after_help = "examples:\n  utmd delete-all\n  utmd delete-all --prefix utmd- --os linux --older-than 24h --dry-run\n  utmd --yes delete-all --prefix utmd-"
+        about = "remove multiple VMs by filters",
+        after_help = "examples:\n  utmd prune\n  utmd prune --prefix utmd- --os linux --older-than 24h --dry-run\n  utmd --yes prune --prefix utmd-"
     )]
-    DeleteAll(DeleteAllArgs),
+    Prune(DeleteAllArgs),
 }
 
 #[derive(Args, Debug)]
@@ -109,6 +119,12 @@ pub struct DeleteAllArgs {
     pub os: Option<OsType>,
     #[arg(long)]
     pub older_than: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct InitArgs {
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]

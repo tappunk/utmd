@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::Value;
+use std::fs;
 
 fn cmd() -> Command {
     let mut command = Command::cargo_bin("utmd").expect("binary should build");
@@ -12,7 +13,7 @@ fn cmd() -> Command {
 #[test]
 fn delete_all_invalid_older_than_returns_exit_2_and_json_error() {
     let output = cmd()
-        .args(["--json", "delete-all", "--older-than", "abc"])
+        .args(["--json", "prune", "--older-than", "abc"])
         .assert()
         .code(2)
         .get_output()
@@ -20,7 +21,7 @@ fn delete_all_invalid_older_than_returns_exit_2_and_json_error() {
         .clone();
 
     let payload: Value = serde_json::from_slice(&output).expect("valid json");
-    assert_eq!(payload["command"], "delete-all");
+    assert_eq!(payload["command"], "prune");
     assert_eq!(payload["ok"], false);
     assert!(payload["error"].as_str().is_some());
 }
@@ -28,10 +29,10 @@ fn delete_all_invalid_older_than_returns_exit_2_and_json_error() {
 #[test]
 fn status_not_found_returns_exit_4_and_json_error() {
     let output = cmd()
-        .args(["--json", "status", "missing-vm"])
+        .args(["--json", "inspect", "missing-vm"])
         .assert()
         .code(4)
-        .stdout(predicate::str::contains("\"command\": \"status\""))
+        .stdout(predicate::str::contains("\"command\": \"inspect\""))
         .get_output()
         .stdout
         .clone();
@@ -43,10 +44,10 @@ fn status_not_found_returns_exit_4_and_json_error() {
 #[test]
 fn list_returns_wrapped_json_schema() {
     let output = cmd()
-        .args(["--json", "list"])
+        .args(["--json", "ls"])
         .assert()
         .code(0)
-        .stdout(predicate::str::contains("\"command\": \"list\""))
+        .stdout(predicate::str::contains("\"command\": \"ls\""))
         .get_output()
         .stdout
         .clone();
@@ -54,4 +55,68 @@ fn list_returns_wrapped_json_schema() {
     let payload: Value = serde_json::from_slice(&output).expect("valid json");
     assert_eq!(payload["ok"], true);
     assert!(payload["data"].is_array());
+}
+
+#[test]
+fn spawn_dry_run_returns_wrapped_json_schema() {
+    let output = cmd()
+        .args(["--json", "--dry-run", "run", "linux"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"command\": \"run\""))
+        .get_output()
+        .stdout
+        .clone();
+
+    let payload: Value = serde_json::from_slice(&output).expect("valid json");
+    assert_eq!(payload["ok"], true);
+    assert_eq!(payload["data"]["action"], "run");
+    assert!(
+        payload["data"]["target"]
+            .as_str()
+            .is_some_and(|name| name.starts_with("utmd-linux-"))
+    );
+}
+
+#[test]
+fn init_dry_run_returns_wrapped_json_schema() {
+    let output = cmd()
+        .args(["--json", "--dry-run", "init"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"command\": \"init\""))
+        .get_output()
+        .stdout
+        .clone();
+
+    let payload: Value = serde_json::from_slice(&output).expect("valid json");
+    assert_eq!(payload["ok"], true);
+    assert_eq!(payload["data"]["action"], "init");
+}
+
+#[test]
+fn init_existing_file_without_force_returns_exit_5() {
+    let config_path =
+        std::env::temp_dir().join(format!("utmd-test-config-{}.toml", std::process::id()));
+    fs::write(&config_path, "default_prefix = \"utmd-\"\n").expect("should create temp config");
+
+    let output = cmd()
+        .args([
+            "--json",
+            "--config",
+            config_path.to_string_lossy().as_ref(),
+            "init",
+        ])
+        .assert()
+        .code(5)
+        .stdout(predicate::str::contains("\"command\": \"init\""))
+        .get_output()
+        .stdout
+        .clone();
+
+    let payload: Value = serde_json::from_slice(&output).expect("valid json");
+    assert_eq!(payload["ok"], false);
+    assert!(payload["error"].as_str().is_some());
+
+    fs::remove_file(config_path).expect("should remove temp config");
 }

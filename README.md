@@ -9,7 +9,7 @@
 
 Disposable VM sandbox manager for UTM on macOS.
 
-Clone base templates into isolated development environments prefixed with `utmd-`. Delete all sandboxes with a single command while leaving personal VMs untouched.
+Create isolated development environments from base templates prefixed with `utmd-`. Run ready-to-use sandboxes with one command, then prune sandboxes with a single cleanup command while leaving personal VMs untouched.
 
 Global flags for automation and scripting:
 
@@ -29,26 +29,34 @@ Global flags for automation and scripting:
 ## Usage
 
 ```bash
-utmd clone linux
-utmd clone macos
-utmd clone linux --name sandbox1
-utmd clone linux --name exact-name --name-exact
-utmd clone linux --name-template "{prefix}{os}-{date}-{rand}"
+utmd create linux
+utmd create macos
+utmd create linux --name sandbox1
+utmd create linux --name exact-name --name-exact
+utmd create linux --name-template "{prefix}{os}-{rand}"
 
-utmd list                              # lists VMs using configured default_prefix
-utmd list --prefix ""                  # list all VMs
-utmd status utmd-linux-abc123
+utmd run linux
+utmd run macos
+utmd run linux --name sandbox1
+utmd run linux --name-template "{prefix}{os}-{rand}"
+
+utmd init
+utmd init --force
+
+utmd ls                                # lists VMs using configured default_prefix
+utmd ls --prefix ""                    # list all VMs
+utmd inspect utmd-linux-abc123
 utmd start utmd-linux-abc123
 utmd stop utmd-linux-abc123
-utmd open utmd-linux-abc123
-utmd delete utmd-linux-abc123
+utmd show utmd-linux-abc123
+utmd rm utmd-linux-abc123
 
-utmd delete-all
-utmd delete-all --prefix utmd- --os linux --older-than 24h --dry-run
-utmd --yes delete-all --prefix utmd-
+utmd prune
+utmd prune --prefix utmd- --os linux --older-than 24h --dry-run
+utmd --yes prune --prefix utmd-
 ```
 
-`delete-all --older-than` currently supports `h` (hours) and `d` (days), for example `24h` and `7d`.
+`prune --older-than` currently supports `h` (hours) and `d` (days), for example `24h` and `7d`.
 
 ## Config
 
@@ -58,12 +66,20 @@ Default config path:
 ~/.config/utmd/config.toml
 ```
 
+Create the file with:
+
+```bash
+utmd init
+```
+
+`create` and `run` require template VMs to already exist in UTM, for example `[t]-linux` and `[t]-macos`.
+
 Example:
 
 ```toml
 utm_app = "/Applications/UTM.app"
 utmctl_path = "/usr/local/bin/utmctl"
-state_path = "/Users/you/Library/Application Support/utmd/state.json"
+state_path = "/Users/user/Library/Application Support/utmd/state.json"
 default_prefix = "utmd-"
 
 [templates]
@@ -71,8 +87,8 @@ linux = "[t]-linux"
 macos = "[t]-macos"
 
 [naming]
-default_template = "{prefix}{os}-{date}-{rand}"
-rand_len = 6
+default_template = "{prefix}{os}-{rand}"
+rand_len = 4
 max_retries = 8
 
 [output]
@@ -105,7 +121,7 @@ All commands return wrapped JSON with a stable top-level shape:
 
 ```json
 {
-  "command": "list",
+  "command": "ls",
   "ok": true,
   "data": [],
   "warnings": [],

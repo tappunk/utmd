@@ -17,7 +17,7 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
         Err(err) => {
             if reporter.is_json() {
                 reporter.print_json(&CommandResponse::<DeleteSummary>::failure(
-                    "delete-all",
+                    "prune",
                     format!("{}", err),
                 ))?;
             } else {
@@ -50,7 +50,7 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
 
     if !cfg.yes && !cfg.dry_run {
         let prompt = format!(
-            "delete {} vm(s) matching prefix '{}' now?",
+            "remove {} vm(s) matching prefix '{}' now?",
             candidates.len(),
             prefix
         );
@@ -76,9 +76,9 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
         if cfg.dry_run {
             summary.results.push(OperationResult {
                 ok: true,
-                action: "delete".to_string(),
+                action: "rm".to_string(),
                 target: Some(vm.name.clone()),
-                message: format!("dry-run: would delete '{}'", vm.name),
+                message: format!("dry-run: would remove '{}'", vm.name),
                 warnings: Vec::new(),
             });
             summary.skipped += 1;
@@ -91,9 +91,9 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
                 summary.deleted += 1;
                 summary.results.push(OperationResult {
                     ok: true,
-                    action: "delete".to_string(),
+                    action: "rm".to_string(),
                     target: Some(vm.name.clone()),
-                    message: "deleted successfully".to_string(),
+                    message: "removed successfully".to_string(),
                     warnings: Vec::new(),
                 });
             }
@@ -101,9 +101,9 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
                 summary.failed += 1;
                 summary.results.push(OperationResult {
                     ok: false,
-                    action: "delete".to_string(),
+                    action: "rm".to_string(),
                     target: Some(vm.name.clone()),
-                    message: format!("failed to delete '{}': {}", vm.name, err),
+                    message: format!("failed to remove '{}': {}", vm.name, err),
                     warnings: Vec::new(),
                 });
             }
@@ -117,14 +117,14 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
     if reporter.is_json() {
         let response = if summary.failed > 0 {
             CommandResponse {
-                command: "delete-all".to_string(),
+                command: "prune".to_string(),
                 ok: false,
                 data: Some(summary.clone()),
                 warnings: Vec::new(),
                 error: Some("partial failure".to_string()),
             }
         } else {
-            CommandResponse::success("delete-all", summary.clone())
+            CommandResponse::success("prune", summary.clone())
         };
         reporter.print_json(&response)?;
     } else {

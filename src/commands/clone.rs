@@ -38,7 +38,7 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
         Err(err) => {
             if reporter.is_json() {
                 reporter.print_json(&CommandResponse::<OperationResult>::failure(
-                    "clone",
+                    "create",
                     format!("{}", err),
                 ))?;
             } else {
@@ -51,13 +51,13 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     if effective_cfg.dry_run {
         let result = OperationResult {
             ok: true,
-            action: "clone".to_string(),
+            action: "create".to_string(),
             target: Some(name.clone()),
             message: format!("dry-run: would clone '{}' from '{}'", name, template),
             warnings: Vec::new(),
         };
         if reporter.is_json() {
-            reporter.print_json(&CommandResponse::success("clone", result))?;
+            reporter.print_json(&CommandResponse::success("create", result))?;
         } else {
             reporter.info(&result.message);
         }
@@ -68,7 +68,7 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     if let Err(err) = utm::clone_vm(cfg, template, &name) {
         if reporter.is_json() {
             reporter.print_json(&CommandResponse::<OperationResult>::failure(
-                "clone",
+                "create",
                 format!("{}", err),
             ))?;
         } else {
@@ -89,14 +89,14 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
 
     let result = OperationResult {
         ok: true,
-        action: "clone".to_string(),
+        action: "create".to_string(),
         target: Some(name),
-        message: "clone completed successfully".to_string(),
+        message: "create completed successfully".to_string(),
         warnings: Vec::new(),
     };
 
     if reporter.is_json() {
-        reporter.print_json(&CommandResponse::success("clone", result))?;
+        reporter.print_json(&CommandResponse::success("create", result))?;
     } else {
         reporter.info(&result.message);
     }
