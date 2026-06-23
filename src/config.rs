@@ -36,6 +36,7 @@ pub struct OutputConfig {
 
 #[derive(Debug, Clone)]
 pub struct EffectiveConfig {
+    pub config_path: PathBuf,
     pub utm_app: String,
     pub utmctl_path: String,
     pub state_path: PathBuf,
@@ -61,15 +62,17 @@ impl EffectiveConfig {
 }
 
 pub fn load_effective(cli: &Cli) -> Result<EffectiveConfig> {
+    let config_path = resolve_config_path(cli).unwrap_or_else(default_config_path);
     let mut cfg = EffectiveConfig {
+        config_path: config_path.clone(),
         utm_app: "/Applications/UTM.app".to_string(),
         utmctl_path: "/usr/local/bin/utmctl".to_string(),
         state_path: default_state_path(),
         default_prefix: "utmd-".to_string(),
         template_linux: "[t]-linux".to_string(),
         template_macos: "[t]-macos".to_string(),
-        naming_template: "{prefix}{os}-{date}-{rand}".to_string(),
-        naming_rand_len: 6,
+        naming_template: "{prefix}{os}-{rand}".to_string(),
+        naming_rand_len: 4,
         naming_max_retries: 8,
         json: false,
         quiet: false,
@@ -77,9 +80,7 @@ pub fn load_effective(cli: &Cli) -> Result<EffectiveConfig> {
         dry_run: false,
     };
 
-    if let Some(path) = resolve_config_path(cli) {
-        merge_file_config(&mut cfg, &path)?;
-    }
+    merge_file_config(&mut cfg, &config_path)?;
 
     merge_env_config(&mut cfg);
 
@@ -92,12 +93,37 @@ pub fn load_effective(cli: &Cli) -> Result<EffectiveConfig> {
     Ok(cfg)
 }
 
+pub fn boilerplate_config(cfg: &EffectiveConfig) -> String {
+    format!(
+        "utm_app = \"{}\"\nutmctl_path = \"{}\"\nstate_path = \"{}\"\ndefault_prefix = \"{}\"\n\n[templates]\nlinux = \"{}\"\nmacos = \"{}\"\n\n[naming]\ndefault_template = \"{}\"\nrand_len = {}\nmax_retries = {}\n\n[output]\ndefault_json = {}\ndefault_quiet = {}\n",
+        cfg.utm_app,
+        cfg.utmctl_path,
+        cfg.state_path.display(),
+        cfg.default_prefix,
+        cfg.template_linux,
+        cfg.template_macos,
+        cfg.naming_template,
+        cfg.naming_rand_len,
+        cfg.naming_max_retries,
+        cfg.json,
+        cfg.quiet,
+    )
+}
+
 fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
     if let Some(path) = &cli.config {
         return Some(PathBuf::from(path));
     }
 
     dirs::config_dir().map(|dir| dir.join("utmd").join("config.toml"))
+}
+
+fn default_config_path() -> PathBuf {
+    if let Some(dir) = dirs::config_dir() {
+        return dir.join("utmd").join("config.toml");
+    }
+
+    PathBuf::from("/tmp/utmd/config.toml")
 }
 
 fn merge_file_config(cfg: &mut EffectiveConfig, path: &PathBuf) -> Result<()> {
