@@ -22,9 +22,11 @@ for tool in cargo gh shasum tar awk git sed; do
   fi
 done
 
-if ! gh auth status >/dev/null 2>&1; then
-  echo "[ERR] GitHub CLI is not authenticated. Run 'gh auth login'."
-  exit 1
+if ! $DRY_RUN; then
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "[ERR] GitHub CLI is not authenticated. Run 'gh auth login'."
+    exit 1
+  fi
 fi
 
 if [[ ! "$BUMP" =~ ^(patch|minor|major)$ ]]; then
@@ -49,8 +51,10 @@ if [[ $(git branch --show-current) != "main" ]]; then
 fi
 
 git fetch origin
-if [[ -n $(git log HEAD..origin/main --oneline) ]]; then
-  echo "[ERR] Local 'main' is behind 'origin/main'. Pull latest changes first."
+LOCAL_HEAD=$(git rev-parse HEAD)
+REMOTE_HEAD=$(git rev-parse origin/main)
+if [[ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]]; then
+  echo "[ERR] Local 'main' must match 'origin/main' exactly. Pull/rebase/push until they match."
   exit 1
 fi
 
@@ -95,11 +99,31 @@ if $DRY_RUN; then
   exit 0
 fi
 
+if git rev-parse -q --verify "refs/tags/v$NEW_VERSION" >/dev/null 2>&1; then
+  echo "[ERR] Tag 'v$NEW_VERSION' already exists locally."
+  exit 1
+fi
+if git ls-remote --exit-code --tags origin "refs/tags/v$NEW_VERSION" >/dev/null 2>&1; then
+  echo "[ERR] Tag 'v$NEW_VERSION' already exists on origin."
+  exit 1
+fi
+
 BACKUP_CARGO_TOML=""
 BACKUP_FLAKE_NIX=""
+PUSHED=false
 rollback() {
   echo ""
   echo "[CRIT] Release pipeline interrupted!"
+  rm -f Cargo.toml.bak flake.nix.bak "${ARCHIVE_NAME:-}" "${CHECKSUM_NAME:-}" "$BACKUP_CARGO_TOML" "$BACKUP_FLAKE_NIX" 2>/dev/null || true
+  if [[ -n "${STAGING_DIR:-}" && -d "${STAGING_DIR}" ]]; then
+    rm -rf "${STAGING_DIR}"
+  fi
+
+  if $PUSHED; then
+    echo "[WARN] Release was already pushed. Manual recovery may be required."
+    return
+  fi
+
   if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
     git tag -d "v$NEW_VERSION"
   fi
@@ -109,11 +133,7 @@ rollback() {
   if [[ -n "$BACKUP_FLAKE_NIX" && -f "$BACKUP_FLAKE_NIX" ]]; then
     cp "$BACKUP_FLAKE_NIX" flake.nix
   fi
-  rm -f Cargo.toml.bak flake.nix.bak "${ARCHIVE_NAME:-}" "${CHECKSUM_NAME:-}" "$BACKUP_CARGO_TOML" "$BACKUP_FLAKE_NIX" 2>/dev/null || true
-  if [[ -n "${STAGING_DIR:-}" && -d "${STAGING_DIR}" ]]; then
-    rm -rf "${STAGING_DIR}"
-  fi
-  echo "[WARN] Rolled back. Re-run release.sh to try again."
+  echo "[WARN] Rolled back local release artifacts. Re-run release.sh to try again."
 }
 trap rollback ERR
 
@@ -122,8 +142,25 @@ BACKUP_CARGO_TOML=$(mktemp)
 BACKUP_FLAKE_NIX=$(mktemp)
 cp Cargo.toml "$BACKUP_CARGO_TOML"
 cp flake.nix "$BACKUP_FLAKE_NIX"
-sed -i.bak "s/version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml flake.nix
-rm Cargo.toml.bak flake.nix.bak
+
+awk -v old="$CURRENT_VERSION" -v new="$NEW_VERSION" '
+BEGIN { in_package = 0; replaced = 0 }
+/^\[package\]$/ { in_package = 1; print; next }
+/^\[[^]]+\]$/ { in_package = 0; print; next }
+{
+  if (in_package && !replaced && $0 == "version = \"" old "\"") {
+    print "version = \"" new "\""
+    replaced = 1
+  } else {
+    print
+  }
+}
+END { if (!replaced) exit 1 }
+' Cargo.toml > Cargo.toml.tmp
+mv Cargo.toml.tmp Cargo.toml
+
+sed -i.bak "s/version = \"$CURRENT_VERSION\";/version = \"$NEW_VERSION\";/" flake.nix
+rm -f Cargo.toml.bak flake.nix.bak
 
 cargo update -p "$BIN_NAME"
 
@@ -156,6 +193,7 @@ trap - ERR
 echo "[PROC] Synchronizing changes with remote origin..."
 git push origin main
 git push origin "v$NEW_VERSION"
+PUSHED=true
 
 echo "[PROC] Deploying GitHub Release and assets..."
 if [[ -n "$NOTES" ]]; then
@@ -209,5 +247,7 @@ rm -f "$ARCHIVE_NAME" "$CHECKSUM_NAME"
 
 echo "[PROC] Publishing crate package to crates.io..."
 cargo publish
+
+trap - ERR
 
 echo "[ SUCCESS ] Release v$NEW_VERSION fully deployed!"
