@@ -76,9 +76,10 @@ pub fn delete_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
 }
 
 pub fn open_vm(name: &str) -> Result<()> {
+    let escaped_name = escape_applescript_string(name);
     let script = format!(
-        "tell application \"UTM\"\nactivate\nshow virtual machine named \"{}\"\nend tell",
-        name
+        "tell application \"UTM\"\nactivate\nset vmref to virtual machine named \"{}\"\nset vm_status to status of vmref\nif vm_status is stopped or vm_status is paused then\nstart vmref\nend if\nend tell",
+        escaped_name
     );
     let status = Command::new("osascript").args(["-e", &script]).status()?;
     if !status.success() {
@@ -86,6 +87,10 @@ pub fn open_vm(name: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn escape_applescript_string(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn utmctl(cfg: &EffectiveConfig) -> Command {
@@ -170,7 +175,7 @@ fn parse_state(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_list_line;
+    use super::{escape_applescript_string, parse_list_line};
 
     #[test]
     fn parse_with_multi_word_name() {
@@ -198,5 +203,11 @@ mod tests {
     fn ignore_single_column_line() {
         let line = "unauthorized";
         assert!(parse_list_line(line).is_none());
+    }
+
+    #[test]
+    fn escape_quotes_for_applescript() {
+        let escaped = escape_applescript_string("foo\"bar");
+        assert_eq!(escaped, "foo\\\"bar");
     }
 }
