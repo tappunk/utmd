@@ -133,7 +133,7 @@ rollback() {
   if [[ -n "$BACKUP_FLAKE_NIX" && -f "$BACKUP_FLAKE_NIX" ]]; then
     cp "$BACKUP_FLAKE_NIX" flake.nix
   fi
-  echo "[WARN] Rolled back local release artifacts. Re-run release.sh to try again."
+  echo "[WARN] Rolled back local release artifacts. Re-run scripts/release.sh to try again."
 }
 trap rollback ERR
 
