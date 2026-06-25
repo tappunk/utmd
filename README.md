@@ -7,74 +7,99 @@
 
 # utmd
 
-Disposable VM sandbox manager for UTM on macOS.
+**Disposable VM sandbox manager for UTM on macOS.** Create, run, and prune isolated development environments.
 
-Create isolated development environments from base templates prefixed with `utmd-`. Run ready-to-use sandboxes with one command, then prune sandboxes with a single cleanup command while leaving personal VMs untouched.
+[Installation](#installation) • [Quick Start](#quick-start) • [Usage](#usage) • [Config](#config) • [JSON Output](#json-output)
 
-Global flags for automation and scripting:
+## Features
+
+- **Template-based cloning** — create VMs from base templates (`[t]-linux`, `[t]-macos`)
+- **Disposable lifecycle** — `create` → `run` → `rm` for one-off sandboxes, `prune` for batch cleanup
+- **Smart naming** — exact names, templates with `{prefix}{os}-{rand}`, or prefix + OS combinations
+- **Batch pruning** — filter by prefix, OS, or age (`--older-than 24h`, `--older-than 7d`)
+- **Machine readable** — JSON output for all commands, designed for automation and agent pipelines
+- **Non-destructive** — only removes `utmd-` prefixed VMs, leaves personal VMs untouched
+- **Dry run support** — `--dry-run` previews actions without mutating state
+- **Global automation flags** — `--json`, `--quiet`, `--yes`, `--dry-run`, `--config`
+
+## Installation
+
+### Homebrew
 
 ```bash
---json      # machine-readable command response
---quiet     # suppress info logs in human mode
---yes       # skip confirmations for destructive actions
---dry-run   # show actions without mutating state
---config    # custom config file path
+brew install tappunk/utmd/utmd
 ```
 
-## Prerequisites
+### Cargo
 
-- macOS with [UTM Desktop Application](https://mac.getutm.app/) installed
-- Base VM templates named `[t]-linux` and `[t]-macos` in UTM
+```bash
+cargo install utmd
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/tappunk/utmd.git
+cd utmd
+cargo build --release
+sudo cp target/release/utmd /usr/local/bin/utmd
+```
+
+## Quick Start
+
+```bash
+utmd init                    # Create config file
+utmd create linux            # Clone a sandbox from template
+utmd run linux               # Boot and show the sandbox
+```
 
 ## Usage
 
+### Create and run sandboxes
+
 ```bash
-utmd create linux
-utmd create macos
-utmd create linux --name sandbox1
+utmd create linux            # Clone from template, name generated
+utmd create linux --name sandbox1      # Clone with a specific name
 utmd create linux --name exact-name --name-exact
 utmd create linux --name-template "{prefix}{os}-{rand}"
 
-utmd run linux
-utmd run macos
-utmd run linux --name sandbox1
+utmd run linux               # Clone and run in one step
+utmd run linux --name myproject  # Clone, run, and show
 utmd run linux --name-template "{prefix}{os}-{rand}"
-
-utmd init
-utmd init --force
-
-utmd ls                                # lists VMs using configured default_prefix
-utmd ls --prefix ""                    # list all VMs
-utmd inspect utmd-linux-abc123
-utmd start utmd-linux-abc123
-utmd stop utmd-linux-abc123
-utmd show utmd-linux-abc123
-utmd rm utmd-linux-abc123
-
-utmd prune
-utmd prune --prefix utmd- --os linux --older-than 24h --dry-run
-utmd --yes prune --prefix utmd-
 ```
 
-`prune --older-than` currently supports `h` (hours) and `d` (days), for example `24h` and `7d`.
+### Manage existing VMs
+
+```bash
+utmd ls                              # List managed VMs (default prefix)
+utmd ls --prefix ""                  # List all VMs
+utmd inspect utmd-linux-abc123       # Show VM details
+utmd start utmd-linux-abc123         # Start a stopped VM
+utmd stop utmd-linux-abc123          # Stop a running VM
+utmd show utmd-linux-abc123          # Open in UTM app
+utmd rm utmd-linux-abc123            # Remove a single VM
+```
+
+### Batch pruning
+
+```bash
+utmd prune                             # Prune all disposable VMs
+utmd prune --prefix utmd-              # Prune with specific prefix
+utmd prune --os linux                  # Prune only Linux VMs
+utmd prune --older-than 24h            # Prune VMs older than 24 hours
+utmd prune --older-than 7d --dry-run   # Preview what would be deleted
+utmd --yes prune                       # Skip confirmation prompts
+```
 
 ## Config
 
-Default config path:
-
-```bash
-~/.config/utmd/config.toml
-```
-
-Create the file with:
+Create the config file with `utmd init`:
 
 ```bash
 utmd init
 ```
 
-`create` and `run` require template VMs to already exist in UTM, for example `[t]-linux` and `[t]-macos`.
-
-Example:
+Default config path: `~/.config/utmd/config.toml`
 
 ```toml
 utm_app = "/Applications/UTM.app"
@@ -96,7 +121,9 @@ default_json = false
 default_quiet = false
 ```
 
-Environment overrides:
+### Environment variables
+
+Environment variables override config values. Precedence: **CLI flags > environment > config file > built-in defaults**.
 
 ```bash
 UTMD_UTM_APP
@@ -109,13 +136,7 @@ UTMD_JSON
 UTMD_QUIET
 ```
 
-Precedence:
-
-```bash
-CLI > environment > config file > built-in defaults
-```
-
-## JSON output
+## JSON Output
 
 All commands return wrapped JSON with a stable top-level shape:
 
@@ -129,51 +150,4 @@ All commands return wrapped JSON with a stable top-level shape:
 }
 ```
 
-Exit codes:
-
-```bash
-0  success
-2  invalid usage or validation
-3  dependency missing
-4  not found
-5  conflict
-6  partial failure
-10 external command failure
-```
-
-## Installation
-
-utmd is available on [crates.io](https://crates.io/crates/utmd) and [Homebrew](https://brew.sh/).
-
-### Cargo
-
-```bash
-cargo install utmd
-```
-
-### Homebrew
-
-```bash
-brew install tappunk/utmd/utmd
-```
-
-### Build from Source
-
-```bash
-git clone https://github.com/tappunk/utmd.git
-cd utmd
-cargo build --release
-sudo cp target/release/utmd /usr/local/bin/utmd
-```
-
-On first run, `utmd` checks for `utmctl` and reports a dependency error when it is unavailable.
-
-## Local Verification
-
-Run the local verification gate before releases:
-
-```bash
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test
-```
+Use `--json` to force JSON output. On first run, `utmd` checks for the `utmctl` dependency and reports an error if it is missing.
