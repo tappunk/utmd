@@ -2,7 +2,64 @@ use crate::config::EffectiveConfig;
 use crate::models::VmInfo;
 use crate::output::Reporter;
 use color_eyre::{Result, eyre::bail};
-use std::process::Command;
+use std::io::Read;
+use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
+
+const TIMEOUT_CLONE: u64 = 120;
+const TIMEOUT_MUTATION: u64 = 30;
+const TIMEOUT_QUERY: u64 = 10;
+
+fn run_with_timeout(mut cmd: Command, label: &'static str, timeout_secs: u64) -> Result<Output> {
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
+
+    let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(e) => bail!("spawn failed: {}", e),
+    };
+
+    let stdout_handle = std::thread::spawn({
+        let mut pipe = child.stdout.take().expect("stdout should be piped");
+        move || {
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            buf
+        }
+    });
+
+    let stderr_handle = std::thread::spawn({
+        let mut pipe = child.stderr.take().expect("stderr should be piped");
+        move || {
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            buf
+        }
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = stdout_handle.join().expect("stdout thread panicked");
+                let stderr = stderr_handle.join().expect("stderr thread panicked");
+                return Ok(Output { status, stdout, stderr });
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = stdout_handle.join();
+                    let _ = stderr_handle.join();
+                    return Err(crate::errors::TimedOut { label, timeout_secs }.into());
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => bail!("wait error: {}", e),
+        }
+    }
+}
 
 pub fn ensure_utmctl(cfg: &EffectiveConfig, reporter: &Reporter) -> Result<()> {
     if which::which(&cfg.utmctl_path).is_ok() || which::which("utmctl").is_ok() {
@@ -15,7 +72,15 @@ pub fn ensure_utmctl(cfg: &EffectiveConfig, reporter: &Reporter) -> Result<()> {
 }
 
 pub fn list_vms(cfg: &EffectiveConfig) -> Result<Vec<VmInfo>> {
-    let output = utmctl(cfg).arg("list").output()?;
+    let output = run_with_timeout(
+        {
+            let mut cmd = utmctl(cfg);
+            cmd.arg("list");
+            cmd
+        },
+        "utmctl list",
+        TIMEOUT_QUERY,
+    )?;
     if !output.status.success() {
         bail!("failed to run utmctl list");
     }
@@ -38,10 +103,17 @@ pub fn list_vms(cfg: &EffectiveConfig) -> Result<Vec<VmInfo>> {
 }
 
 pub fn clone_vm(cfg: &EffectiveConfig, template: &str, name: &str) -> Result<()> {
-    let status = utmctl(cfg)
-        .args(["clone", template, "--name", name])
-        .status()?;
-    if !status.success() {
+    eprintln!("info: running utmctl clone...");
+    let output = run_with_timeout(
+        {
+            let mut cmd = utmctl(cfg);
+            cmd.args(["clone", template, "--name", name]);
+            cmd
+        },
+        "utmctl clone",
+        TIMEOUT_CLONE,
+    )?;
+    if !output.status.success() {
         bail!("failed to clone vm");
     }
 
@@ -49,8 +121,17 @@ pub fn clone_vm(cfg: &EffectiveConfig, template: &str, name: &str) -> Result<()>
 }
 
 pub fn start_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
-    let status = utmctl(cfg).args(["start", name]).status()?;
-    if !status.success() {
+    eprintln!("info: running utmctl start...");
+    let output = run_with_timeout(
+        {
+            let mut cmd = utmctl(cfg);
+            cmd.args(["start", name]);
+            cmd
+        },
+        "utmctl start",
+        TIMEOUT_MUTATION,
+    )?;
+    if !output.status.success() {
         bail!("failed to start vm '{}'", name);
     }
 
@@ -58,8 +139,17 @@ pub fn start_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
 }
 
 pub fn stop_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
-    let status = utmctl(cfg).args(["stop", name]).status()?;
-    if !status.success() {
+    eprintln!("info: running utmctl stop...");
+    let output = run_with_timeout(
+        {
+            let mut cmd = utmctl(cfg);
+            cmd.args(["stop", name]);
+            cmd
+        },
+        "utmctl stop",
+        TIMEOUT_MUTATION,
+    )?;
+    if !output.status.success() {
         bail!("failed to stop vm '{}'", name);
     }
 
@@ -67,8 +157,17 @@ pub fn stop_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
 }
 
 pub fn delete_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
-    let status = utmctl(cfg).args(["delete", name]).status()?;
-    if !status.success() {
+    eprintln!("info: running utmctl delete...");
+    let output = run_with_timeout(
+        {
+            let mut cmd = utmctl(cfg);
+            cmd.args(["delete", name]);
+            cmd
+        },
+        "utmctl delete",
+        TIMEOUT_MUTATION,
+    )?;
+    if !output.status.success() {
         bail!("failed to delete vm '{}'", name);
     }
 
@@ -81,8 +180,16 @@ pub fn open_vm(name: &str) -> Result<()> {
         "tell application \"UTM\"\nactivate\nset vmref to virtual machine named \"{}\"\nset vm_status to status of vmref\nif vm_status is stopped or vm_status is paused then\nstart vmref\nend if\nend tell",
         escaped_name
     );
-    let status = Command::new("osascript").args(["-e", &script]).status()?;
-    if !status.success() {
+    let output = run_with_timeout(
+        {
+            let mut cmd = Command::new("osascript");
+            cmd.args(["-e", &script]);
+            cmd
+        },
+        "osascript",
+        TIMEOUT_QUERY,
+    )?;
+    if !output.status.success() {
         bail!("failed to open vm '{}' in UTM", name);
     }
 

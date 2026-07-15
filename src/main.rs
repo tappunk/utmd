@@ -3,7 +3,7 @@ use color_eyre::Result;
 use utmd::cli::{Cli, Commands};
 use utmd::commands::{clone, delete_all, init, lifecycle, spawn};
 use utmd::config::load_effective;
-use utmd::errors::ExitCode;
+use utmd::errors::{ExitCode, TimedOut};
 use utmd::output::Reporter;
 use utmd::utm;
 
@@ -43,8 +43,13 @@ fn main() -> Result<()> {
     let code = match run() {
         Ok(code) => code,
         Err(err) => {
-            eprintln!("error: {}", err);
-            ExitCode::InvalidUsage
+            if err.downcast_ref::<TimedOut>().is_some() {
+                eprintln!("error: {}", err);
+                ExitCode::CommandTimedOut
+            } else {
+                eprintln!("error: {}", err);
+                ExitCode::InvalidUsage
+            }
         }
     };
 
