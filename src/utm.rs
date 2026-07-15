@@ -45,14 +45,22 @@ fn run_with_timeout(mut cmd: Command, label: &'static str, timeout_secs: u64) ->
             Ok(Some(status)) => {
                 let stdout = stdout_handle.join().expect("stdout thread panicked");
                 let stderr = stderr_handle.join().expect("stderr thread panicked");
-                return Ok(Output { status, stdout, stderr });
+                return Ok(Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
             }
             Ok(None) => {
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = stdout_handle.join();
                     let _ = stderr_handle.join();
-                    return Err(crate::errors::TimedOut { label, timeout_secs }.into());
+                    return Err(crate::errors::TimedOut {
+                        label,
+                        timeout_secs,
+                    }
+                    .into());
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }

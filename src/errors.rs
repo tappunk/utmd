@@ -6,7 +6,11 @@ pub struct TimedOut {
 
 impl std::fmt::Display for TimedOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} timed out after {}s — UTM may be unresponsive", self.label, self.timeout_secs)
+        write!(
+            f,
+            "{} timed out after {}s — UTM may be unresponsive",
+            self.label, self.timeout_secs
+        )
     }
 }
 
