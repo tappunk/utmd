@@ -22,11 +22,11 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
         .collect::<HashSet<_>>();
 
     let mut effective_cfg = cfg.clone();
-    if let Some(prefix) = args.prefix {
-        effective_cfg.default_prefix = prefix;
+    if let Some(ref prefix) = args.prefix {
+        effective_cfg.default_prefix = prefix.clone();
     }
 
-    let name = match generate_name(
+    let mut name = match generate_name(
         &effective_cfg,
         args.os_type,
         args.name.as_deref(),
@@ -65,14 +65,50 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     }
 
     reporter.info(&format!("cloning '{}' to '{}'", template, name));
-    if let Err(err) = utm::clone_vm(cfg, template, &name) {
+    let mut clone_err: Option<String> = None;
+    for attempt in 0..=2 {
+        if attempt > 0 {
+            let fresh: HashSet<String> = utm::list_vms(cfg)
+                .map(|vms| vms.into_iter().map(|vm| vm.name).collect())
+                .unwrap_or_default();
+            let mut retry_cfg = cfg.clone();
+            if let Some(ref prefix) = args.prefix {
+                retry_cfg.default_prefix = prefix.clone();
+            }
+            match generate_name(
+                &retry_cfg,
+                args.os_type,
+                None,
+                false,
+                None,
+                &fresh,
+            ) {
+                Ok(n) => name = n,
+                Err(_) => {
+                    return Ok(ExitCode::Conflict);
+                }
+            }
+        }
+        match utm::clone_vm(cfg, template, &name) {
+            Ok(()) => break,
+            Err(e) => {
+                let fresh = utm::list_vms(cfg).unwrap_or_default();
+                if fresh.iter().any(|vm| vm.name == name) {
+                    continue;
+                }
+                clone_err = Some(format!("{}", e));
+                break;
+            }
+        }
+    }
+    if let Some(err) = clone_err {
         if reporter.is_json() {
             reporter.print_json(&CommandResponse::<OperationResult>::failure(
                 "create",
-                format!("{}", err),
+                err,
             ))?;
         } else {
-            reporter.error(&format!("{}", err));
+            reporter.error(&err);
         }
         return Ok(ExitCode::ExternalCommandFailed);
     }
