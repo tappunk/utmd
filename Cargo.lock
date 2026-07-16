@@ -1069,6 +1069,7 @@ dependencies = [
  "color-eyre",
  "dialoguer",
  "dirs",
+ "eyre",
  "predicates",
  "rand",
  "serde",

@@ -3,6 +3,8 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +30,8 @@ pub fn load(path: &Path) -> Result<StateFile> {
         return Ok(StateFile::default());
     }
 
-    let parsed: StateFile = serde_json::from_str(&content)?;
+    let parsed: StateFile = serde_json::from_str(&content)
+        .map_err(|e| eyre::eyre!("state file '{}' is corrupted (json parse error): {}", path.display(), e))?;
     Ok(parsed)
 }
 
@@ -36,8 +39,16 @@ pub fn save(path: &Path, state: &StateFile) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    let tmp = path.with_extension("json.tmp");
     let content = serde_json::to_string_pretty(state)?;
-    fs::write(path, content)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .truncate(true)
+        .open(&tmp)?;
+    file.write_all(content.as_bytes())?;
+    file.flush()?;
+    fs::rename(&tmp, path)?;
     Ok(())
 }
 
