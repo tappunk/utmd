@@ -11,11 +11,11 @@ fn cmd() -> Command {
 }
 
 #[test]
-fn delete_all_invalid_older_than_returns_exit_2_and_json_error() {
+fn delete_all_invalid_older_than_returns_exit_64_and_json_error() {
     let output = cmd()
         .args(["--json", "prune", "--older-than", "abc"])
         .assert()
-        .code(2)
+        .code(64)
         .get_output()
         .stdout
         .clone();
@@ -27,11 +27,11 @@ fn delete_all_invalid_older_than_returns_exit_2_and_json_error() {
 }
 
 #[test]
-fn status_not_found_returns_exit_4_and_json_error() {
+fn status_not_found_returns_exit_66_and_json_error() {
     let output = cmd()
         .args(["--json", "inspect", "missing-vm"])
         .assert()
-        .code(4)
+        .code(66)
         .stdout(predicate::str::contains("\"command\": \"inspect\""))
         .get_output()
         .stdout
@@ -95,7 +95,7 @@ fn init_dry_run_returns_wrapped_json_schema() {
 }
 
 #[test]
-fn init_existing_file_without_force_returns_exit_5() {
+fn init_existing_file_without_force_returns_exit_65() {
     let config_path =
         std::env::temp_dir().join(format!("utmd-test-config-{}.toml", std::process::id()));
     fs::write(&config_path, "default_prefix = \"utmd-\"\n").expect("should create temp config");
@@ -108,7 +108,7 @@ fn init_existing_file_without_force_returns_exit_5() {
             "init",
         ])
         .assert()
-        .code(5)
+        .code(65)
         .stdout(predicate::str::contains("\"command\": \"init\""))
         .get_output()
         .stdout
