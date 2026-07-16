@@ -43,11 +43,12 @@ fn main() -> Result<()> {
     let code = match run() {
         Ok(code) => code,
         Err(err) => {
+            eprintln!("error: {}", err);
             if err.downcast_ref::<TimedOut>().is_some() {
-                eprintln!("error: {}", err);
                 ExitCode::CommandTimedOut
+            } else if err.chain().any(|e| e.is::<std::io::Error>()) {
+                ExitCode::ExternalCommandFailed
             } else {
-                eprintln!("error: {}", err);
                 ExitCode::InvalidUsage
             }
         }
