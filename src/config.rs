@@ -62,7 +62,15 @@ impl EffectiveConfig {
 }
 
 pub fn load_effective(cli: &Cli) -> Result<EffectiveConfig> {
-    let config_path = resolve_config_path(cli).unwrap_or_else(default_config_path);
+    let config_path = if let Some(ref path) = cli.config {
+        let path = PathBuf::from(path);
+        if !path.exists() {
+            bail!("config file '{}' does not exist", path.display());
+        }
+        path
+    } else {
+        resolve_config_path(cli).unwrap_or_else(default_config_path)
+    };
     let mut cfg = EffectiveConfig {
         config_path: config_path.clone(),
         utm_app: "/Applications/UTM.app".to_string(),
