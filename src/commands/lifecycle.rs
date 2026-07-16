@@ -145,6 +145,17 @@ pub fn delete(args: DeleteArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
         }
     }
 
+    let existing = utm::list_vms(cfg)?.into_iter().any(|vm| vm.name == args.name);
+    if !existing && !args.force {
+        let msg = format!("vm '{}' not found", args.name);
+        if reporter.is_json() {
+            reporter.print_json(&CommandResponse::<OperationResult>::failure("rm", msg))?;
+        } else {
+            reporter.error(&msg);
+        }
+        return Ok(ExitCode::NotFound);
+    }
+
     let code = mutate_vm("rm", &args.name, cfg, reporter, utm::delete_vm)?;
     if matches!(code, ExitCode::Success) && !cfg.dry_run {
         state::remove_vm(&cfg.state_path, &args.name)?;
