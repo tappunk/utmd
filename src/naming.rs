@@ -1,12 +1,15 @@
 use crate::cli::OsType;
-use crate::config::EffectiveConfig;
 use chrono::Local;
 use color_eyre::{Result, eyre::bail};
 use rand::{Rng, distr::Alphanumeric};
 use std::collections::HashSet;
 
+#[allow(clippy::too_many_arguments)]
 pub fn generate_name(
-    cfg: &EffectiveConfig,
+    prefix: &str,
+    naming_template: &str,
+    naming_rand_len: usize,
+    naming_max_retries: u8,
     os: OsType,
     custom_name: Option<&str>,
     name_exact: bool,
@@ -14,10 +17,10 @@ pub fn generate_name(
     existing: &HashSet<String>,
 ) -> Result<String> {
     if let Some(name) = custom_name {
-        let final_name = if name_exact || name.starts_with(&cfg.default_prefix) {
+        let final_name = if name_exact || name.starts_with(prefix) {
             name.to_string()
         } else {
-            format!("{}{}", cfg.default_prefix, name)
+            format!("{}{}", prefix, name)
         };
 
         if existing.contains(&final_name) {
@@ -26,9 +29,9 @@ pub fn generate_name(
         return Ok(final_name);
     }
 
-    let template = name_template.unwrap_or(&cfg.naming_template);
-    for _ in 0..cfg.naming_max_retries {
-        let candidate = render_template(template, &cfg.default_prefix, os, cfg.naming_rand_len);
+    let template = name_template.unwrap_or(naming_template);
+    for _ in 0..naming_max_retries {
+        let candidate = render_template(template, prefix, os, naming_rand_len);
         if !existing.contains(&candidate) {
             return Ok(candidate);
         }
@@ -36,7 +39,7 @@ pub fn generate_name(
 
     bail!(
         "failed to generate unique vm name after {} retries",
-        cfg.naming_max_retries
+        naming_max_retries
     )
 }
 

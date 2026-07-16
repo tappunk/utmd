@@ -21,13 +21,13 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
         .map(|vm| vm.name)
         .collect::<HashSet<_>>();
 
-    let mut effective_cfg = cfg.clone();
-    if let Some(ref prefix) = args.prefix {
-        effective_cfg.default_prefix = prefix.clone();
-    }
+    let prefix = args.prefix.as_deref().unwrap_or(&cfg.default_prefix);
 
     let mut name = match generate_name(
-        &effective_cfg,
+        prefix,
+        &cfg.naming_template,
+        cfg.naming_rand_len,
+        cfg.naming_max_retries,
         args.os_type,
         args.name.as_deref(),
         args.name_exact,
@@ -48,7 +48,7 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
         }
     };
 
-    if effective_cfg.dry_run {
+    if cfg.dry_run {
         let result = OperationResult {
             ok: true,
             action: "run".to_string(),
@@ -74,12 +74,12 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
             let fresh: HashSet<String> = utm::list_vms(cfg)
                 .map(|vms| vms.into_iter().map(|vm| vm.name).collect())
                 .unwrap_or_default();
-            let mut retry_cfg = cfg.clone();
-            if let Some(ref prefix) = args.prefix {
-                retry_cfg.default_prefix = prefix.clone();
-            }
+            let retry_prefix = args.prefix.as_deref().unwrap_or(&cfg.default_prefix);
             match generate_name(
-                &retry_cfg,
+                retry_prefix,
+                &cfg.naming_template,
+                cfg.naming_rand_len,
+                cfg.naming_max_retries,
                 args.os_type,
                 None,
                 false,
