@@ -92,6 +92,9 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
 
     reporter.info(&format!("starting '{}'", name));
     if let Err(err) = utm::start_vm(cfg, &name) {
+        eprintln!("warning: cleaning up orphaned vm '{}'", name);
+        let _ = utm::delete_vm(cfg, &name);
+        let _ = state::remove_vm(&cfg.state_path, &name);
         if reporter.is_json() {
             reporter.print_json(&CommandResponse::<OperationResult>::failure(
                 "run",
@@ -105,6 +108,10 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
 
     reporter.info(&format!("opening '{}' in UTM", name));
     if let Err(err) = utm::open_vm(&name) {
+        eprintln!("warning: cleaning up orphaned vm '{}'", name);
+        let _ = utm::stop_vm(cfg, &name);
+        let _ = utm::delete_vm(cfg, &name);
+        let _ = state::remove_vm(&cfg.state_path, &name);
         if reporter.is_json() {
             reporter.print_json(&CommandResponse::<OperationResult>::failure(
                 "run",
