@@ -145,7 +145,9 @@ pub fn delete(args: DeleteArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
         }
     }
 
-    let existing = utm::list_vms(cfg)?.into_iter().any(|vm| vm.name == args.name);
+    let existing = utm::list_vms(cfg)?
+        .into_iter()
+        .any(|vm| vm.name == args.name);
     if !existing && !args.force {
         let msg = format!("vm '{}' not found", args.name);
         if reporter.is_json() {

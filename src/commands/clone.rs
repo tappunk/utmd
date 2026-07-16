@@ -103,10 +103,7 @@ pub fn run(args: CloneArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
     }
     if let Some(err) = clone_err {
         if reporter.is_json() {
-            reporter.print_json(&CommandResponse::<OperationResult>::failure(
-                "create",
-                err,
-            ))?;
+            reporter.print_json(&CommandResponse::<OperationResult>::failure("create", err))?;
         } else {
             reporter.error(&err);
         }

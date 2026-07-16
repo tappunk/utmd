@@ -12,7 +12,12 @@ const TIMEOUT_QUERY: u64 = 10;
 
 fn stderr_msg(output: &Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr);
-    stderr.trim().lines().next().unwrap_or("unknown error").to_string()
+    stderr
+        .trim()
+        .lines()
+        .next()
+        .unwrap_or("unknown error")
+        .to_string()
 }
 
 fn run_with_timeout(mut cmd: Command, label: &'static str, timeout_secs: u64) -> Result<Output> {
@@ -203,7 +208,11 @@ pub fn open_vm(name: &str) -> Result<()> {
         TIMEOUT_QUERY,
     )?;
     if !output.status.success() {
-        bail!("failed to open vm '{}' in UTM: {}", name, stderr_msg(&output));
+        bail!(
+            "failed to open vm '{}' in UTM: {}",
+            name,
+            stderr_msg(&output)
+        );
     }
 
     Ok(())

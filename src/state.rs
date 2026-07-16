@@ -30,8 +30,13 @@ pub fn load(path: &Path) -> Result<StateFile> {
         return Ok(StateFile::default());
     }
 
-    let parsed: StateFile = serde_json::from_str(&content)
-        .map_err(|e| eyre::eyre!("state file '{}' is corrupted (json parse error): {}", path.display(), e))?;
+    let parsed: StateFile = serde_json::from_str(&content).map_err(|e| {
+        eyre::eyre!(
+            "state file '{}' is corrupted (json parse error): {}",
+            path.display(),
+            e
+        )
+    })?;
     Ok(parsed)
 }
 
