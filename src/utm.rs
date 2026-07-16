@@ -10,6 +10,11 @@ const TIMEOUT_CLONE: u64 = 120;
 const TIMEOUT_MUTATION: u64 = 30;
 const TIMEOUT_QUERY: u64 = 10;
 
+fn stderr_msg(output: &Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    stderr.trim().lines().next().unwrap_or("unknown error").to_string()
+}
+
 fn run_with_timeout(mut cmd: Command, label: &'static str, timeout_secs: u64) -> Result<Output> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -90,7 +95,7 @@ pub fn list_vms(cfg: &EffectiveConfig) -> Result<Vec<VmInfo>> {
         TIMEOUT_QUERY,
     )?;
     if !output.status.success() {
-        bail!("failed to run utmctl list");
+        bail!("failed to run utmctl list: {}", stderr_msg(&output));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -122,7 +127,7 @@ pub fn clone_vm(cfg: &EffectiveConfig, template: &str, name: &str) -> Result<()>
         TIMEOUT_CLONE,
     )?;
     if !output.status.success() {
-        bail!("failed to clone vm");
+        bail!("failed to clone vm: {}", stderr_msg(&output));
     }
 
     Ok(())
@@ -140,7 +145,7 @@ pub fn start_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
         TIMEOUT_MUTATION,
     )?;
     if !output.status.success() {
-        bail!("failed to start vm '{}'", name);
+        bail!("failed to start vm '{}': {}", name, stderr_msg(&output));
     }
 
     Ok(())
@@ -158,7 +163,7 @@ pub fn stop_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
         TIMEOUT_MUTATION,
     )?;
     if !output.status.success() {
-        bail!("failed to stop vm '{}'", name);
+        bail!("failed to stop vm '{}': {}", name, stderr_msg(&output));
     }
 
     Ok(())
@@ -176,7 +181,7 @@ pub fn delete_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
         TIMEOUT_MUTATION,
     )?;
     if !output.status.success() {
-        bail!("failed to delete vm '{}'", name);
+        bail!("failed to delete vm '{}': {}", name, stderr_msg(&output));
     }
 
     Ok(())
@@ -198,7 +203,7 @@ pub fn open_vm(name: &str) -> Result<()> {
         TIMEOUT_QUERY,
     )?;
     if !output.status.success() {
-        bail!("failed to open vm '{}' in UTM", name);
+        bail!("failed to open vm '{}' in UTM: {}", name, stderr_msg(&output));
     }
 
     Ok(())
