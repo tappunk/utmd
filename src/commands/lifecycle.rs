@@ -7,6 +7,7 @@ use crate::state;
 use crate::utm;
 use color_eyre::Result;
 use dialoguer::Confirm;
+use std::io::IsTerminal;
 
 pub fn list(args: ListArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Result<ExitCode> {
     let mut vms = utm::list_vms(cfg)?;
@@ -129,6 +130,11 @@ pub fn open(args: NameArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Resul
 
 pub fn delete(args: DeleteArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Result<ExitCode> {
     if !cfg.yes && !args.force && !cfg.dry_run {
+        if !std::io::stdin().is_terminal() {
+            return Err(color_eyre::eyre::eyre!(
+                "stdin is not a terminal — use --yes or --force to confirm deletion"
+            ));
+        }
         let confirmed = Confirm::new()
             .with_prompt(format!("delete vm '{}' now?", args.name))
             .default(false)

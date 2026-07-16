@@ -8,6 +8,7 @@ use crate::utm;
 use chrono::{Duration, Utc};
 use color_eyre::Result;
 use dialoguer::Confirm;
+use std::io::IsTerminal;
 
 pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> Result<ExitCode> {
     let prefix = args.prefix.unwrap_or_else(|| cfg.default_prefix.clone());
@@ -49,6 +50,11 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
     }
 
     if !cfg.yes && !cfg.dry_run {
+        if !std::io::stdin().is_terminal() {
+            return Err(color_eyre::eyre::eyre!(
+                "stdin is not a terminal — use --yes or --force to confirm deletion"
+            ));
+        }
         let prompt = format!(
             "remove {} vm(s) matching prefix '{}' now?",
             candidates.len(),
