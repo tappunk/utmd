@@ -58,12 +58,12 @@ utmd run linux               # Boot and show the sandbox
 ### Create and run sandboxes
 
 ```bash
-utmd create linux            # Clone from template, name generated
+utmd create linux                      # Clone from template, name generated
 utmd create linux --name sandbox1      # Clone with a specific name
 utmd create linux --name exact-name --name-exact
 utmd create linux --name-template "{prefix}{os}-{rand}"
 
-utmd run linux               # Clone and run in one step
+utmd run linux                   # Clone and run in one step
 utmd run linux --name myproject  # Clone, run, and show
 utmd run linux --name-template "{prefix}{os}-{rand}"
 ```
