@@ -52,7 +52,7 @@ pub fn run(args: DeleteAllArgs, cfg: &EffectiveConfig, reporter: &Reporter) -> R
     if !cfg.yes && !cfg.dry_run {
         if !std::io::stdin().is_terminal() {
             return Err(color_eyre::eyre::eyre!(
-                "stdin is not a terminal — use --yes or --force to confirm deletion"
+                "stdin is not a terminal — use --yes to confirm deletion"
             ));
         }
         let prompt = format!(
