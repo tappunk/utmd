@@ -2,10 +2,26 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
+
+fn fixture_utmctl() -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("utmd-test-utmctl-{}", std::process::id()));
+    let binary = root.join("UTM.app/Contents/MacOS/utmctl");
+    if !binary.exists() {
+        fs::create_dir_all(binary.parent().expect("parent should exist"))
+            .expect("should create fixture dir");
+        fs::write(&binary, "#!/bin/sh\nexit 0\n").expect("should write stub");
+        fs::set_permissions(&binary, PermissionsExt::from_mode(0o755)).expect("should chmod");
+    }
+    binary
+}
 
 fn cmd() -> Command {
     let mut command = Command::cargo_bin("utmd").expect("binary should build");
-    command.env("UTMD_UTMCTL_PATH", "/usr/bin/true");
+    command.env(
+        "UTMD_UTMCTL_PATH",
+        fixture_utmctl().to_string_lossy().as_ref(),
+    );
     command.env("UTMD_STATE_PATH", "/tmp/utmd-test-state.json");
     command
 }

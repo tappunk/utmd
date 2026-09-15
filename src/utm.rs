@@ -1,8 +1,9 @@
 use crate::config::EffectiveConfig;
 use crate::models::VmInfo;
 use crate::output::Reporter;
-use color_eyre::{Result, eyre::bail};
+use color_eyre::{Result, eyre::WrapErr, eyre::bail, eyre::eyre};
 use std::io::Read;
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
@@ -80,19 +81,90 @@ fn run_with_timeout(mut cmd: Command, label: &'static str, timeout_secs: u64) ->
 }
 
 pub fn ensure_utmctl(cfg: &EffectiveConfig, reporter: &Reporter) -> Result<()> {
-    if which::which(&cfg.utmctl_path).is_ok() || which::which("utmctl").is_ok() {
-        return Ok(());
+    let path = resolve_utmctl(cfg)
+        .map_err(|err| {
+            reporter.error(&format!("{}", err));
+            reporter.info(
+                "utmctl ships inside UTM.app and requires a GUI login session; it fails over SSH or before login",
+            );
+            eyre!("utmctl dependency missing")
+        })?;
+
+    reporter.info(&format!("using utmctl at {}", path.display()));
+    Ok(())
+}
+
+pub fn resolve_utmctl(cfg: &EffectiveConfig) -> Result<PathBuf> {
+    if let Some(explicit) = cfg.utmctl_path.as_deref() {
+        let trimmed = explicit.trim();
+        if !trimmed.is_empty() {
+            return validated_utmctl_path(Path::new(trimmed));
+        }
     }
 
-    reporter.error("utmctl not found in configured path or path");
-    reporter.info("you can set UTMD_UTMCTL_PATH or install a symlink to utmctl");
-    bail!("utmctl dependency missing")
+    if let Ok(found) = which::which("utmctl") {
+        return validated_utmctl_path(&found);
+    }
+
+    for fallback in fallback_utmctl_paths() {
+        if fallback.exists() {
+            return validated_utmctl_path(&fallback);
+        }
+    }
+
+    bail!(
+        "utmctl not found: no explicit utmctl_path, not on PATH, and no UTM.app install found in standard locations. Set utmctl_path or UTMD_UTMCTL_PATH to the path of a utmctl binary inside UTM.app"
+    )
+}
+
+fn fallback_utmctl_paths() -> Vec<PathBuf> {
+    let mut paths = vec![
+        PathBuf::from("/Applications/UTM.app/Contents/MacOS/utmctl"),
+        PathBuf::from("/opt/homebrew/bin/utmctl"),
+        PathBuf::from("/usr/local/bin/utmctl"),
+    ];
+    if let Some(home) = dirs::home_dir() {
+        paths.push(home.join("Applications/UTM.app/Contents/MacOS/utmctl"));
+    }
+    paths
+}
+
+fn validated_utmctl_path(path: &Path) -> Result<PathBuf> {
+    let resolved = std::fs::canonicalize(path).wrap_err(format!(
+        "failed to resolve utmctl path '{}'",
+        path.display()
+    ))?;
+    if !is_utmctl_path(&resolved) {
+        bail!(
+            "resolved utmctl path '{}' does not end with UTM.app/Contents/MacOS/utmctl",
+            resolved.display()
+        );
+    }
+    Ok(resolved)
+}
+
+pub fn is_utmctl_path(path: &Path) -> bool {
+    let mut components = path.components().rev();
+    matches!(
+        (
+            components.next(),
+            components.next(),
+            components.next(),
+            components.next()
+        ),
+        (
+            Some(Component::Normal(a)),
+            Some(Component::Normal(b)),
+            Some(Component::Normal(c)),
+            Some(Component::Normal(d))
+        ) if a == "utmctl" && b == "MacOS" && c == "Contents" && d == "UTM.app"
+    )
 }
 
 pub fn list_vms(cfg: &EffectiveConfig) -> Result<Vec<VmInfo>> {
     let output = run_with_timeout(
         {
-            let mut cmd = utmctl(cfg);
+            let mut cmd = utmctl_cmd(cfg)?;
             cmd.arg("list");
             cmd
         },
@@ -124,7 +196,7 @@ pub fn clone_vm(cfg: &EffectiveConfig, template: &str, name: &str) -> Result<()>
     eprintln!("info: running utmctl clone...");
     let output = run_with_timeout(
         {
-            let mut cmd = utmctl(cfg);
+            let mut cmd = utmctl_cmd(cfg)?;
             cmd.args(["clone", template, "--name", name]);
             cmd
         },
@@ -142,7 +214,7 @@ pub fn start_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
     eprintln!("info: running utmctl start...");
     let output = run_with_timeout(
         {
-            let mut cmd = utmctl(cfg);
+            let mut cmd = utmctl_cmd(cfg)?;
             cmd.args(["start", name]);
             cmd
         },
@@ -160,7 +232,7 @@ pub fn stop_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
     eprintln!("info: running utmctl stop...");
     let output = run_with_timeout(
         {
-            let mut cmd = utmctl(cfg);
+            let mut cmd = utmctl_cmd(cfg)?;
             cmd.args(["stop", name]);
             cmd
         },
@@ -178,7 +250,7 @@ pub fn delete_vm(cfg: &EffectiveConfig, name: &str) -> Result<()> {
     eprintln!("info: running utmctl delete...");
     let output = run_with_timeout(
         {
-            let mut cmd = utmctl(cfg);
+            let mut cmd = utmctl_cmd(cfg)?;
             cmd.args(["delete", name]);
             cmd
         },
@@ -222,12 +294,9 @@ fn escape_applescript_string(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-fn utmctl(cfg: &EffectiveConfig) -> Command {
-    if cfg.utmctl_path.trim().is_empty() {
-        return Command::new("utmctl");
-    }
-
-    Command::new(&cfg.utmctl_path)
+fn utmctl_cmd(cfg: &EffectiveConfig) -> Result<Command> {
+    let path = resolve_utmctl(cfg)?;
+    Ok(Command::new(path))
 }
 
 fn is_header_line(line: &str) -> bool {
@@ -304,7 +373,32 @@ fn parse_state(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{escape_applescript_string, parse_list_line};
+    use super::{escape_applescript_string, is_utmctl_path, parse_list_line};
+    use std::path::Path;
+
+    #[test]
+    fn accepts_embedded_app_path() {
+        let path = Path::new("/Applications/UTM.app/Contents/MacOS/utmctl");
+        assert!(is_utmctl_path(path));
+    }
+
+    #[test]
+    fn accepts_home_app_path() {
+        let path = Path::new("/Users/tappunk/Applications/UTM.app/Contents/MacOS/utmctl");
+        assert!(is_utmctl_path(path));
+    }
+
+    #[test]
+    fn rejects_path_not_inside_app_bundle() {
+        let path = Path::new("/opt/homebrew/bin/utmctl-copy");
+        assert!(!is_utmctl_path(path));
+    }
+
+    #[test]
+    fn rejects_similar_suffix_only() {
+        let path = Path::new("/Applications/UTM.app/Contents/MacOS/utmctl/extra");
+        assert!(!is_utmctl_path(path));
+    }
 
     #[test]
     fn parse_with_multi_word_name() {

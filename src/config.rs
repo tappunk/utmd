@@ -38,7 +38,7 @@ pub struct OutputConfig {
 pub struct EffectiveConfig {
     pub config_path: PathBuf,
     pub utm_app: String,
-    pub utmctl_path: String,
+    pub utmctl_path: Option<String>,
     pub state_path: PathBuf,
     pub default_prefix: String,
     pub template_linux: String,
@@ -74,7 +74,7 @@ pub fn load_effective(cli: &Cli) -> Result<EffectiveConfig> {
     let mut cfg = EffectiveConfig {
         config_path: config_path.clone(),
         utm_app: "/Applications/UTM.app".to_string(),
-        utmctl_path: "/opt/homebrew/bin/utmctl".to_string(),
+        utmctl_path: None,
         state_path: default_state_path(),
         default_prefix: "utmd-".to_string(),
         template_linux: "[t]-linux".to_string(),
@@ -102,20 +102,29 @@ pub fn load_effective(cli: &Cli) -> Result<EffectiveConfig> {
 }
 
 pub fn boilerplate_config(cfg: &EffectiveConfig) -> String {
-    format!(
-        "utm_app = \"{}\"\nutmctl_path = \"{}\"\nstate_path = \"{}\"\ndefault_prefix = \"{}\"\n\n[templates]\nlinux = \"{}\"\nmacos = \"{}\"\n\n[naming]\ndefault_template = \"{}\"\nrand_len = {}\nmax_retries = {}\n\n[output]\ndefault_json = {}\ndefault_quiet = {}\n",
-        cfg.utm_app,
-        cfg.utmctl_path,
-        cfg.state_path.display(),
-        cfg.default_prefix,
-        cfg.template_linux,
-        cfg.template_macos,
-        cfg.naming_template,
-        cfg.naming_rand_len,
-        cfg.naming_max_retries,
-        cfg.json,
-        cfg.quiet,
-    )
+    let mut lines = vec![format!("utm_app = \"{}\"", cfg.utm_app)];
+    if let Some(path) = &cfg.utmctl_path
+        && !path.trim().is_empty()
+    {
+        lines.push(format!("utmctl_path = \"{}\"", path));
+    }
+    lines.push(format!("state_path = \"{}\"", cfg.state_path.display()));
+    lines.push(format!("default_prefix = \"{}\"", cfg.default_prefix));
+    lines.push(String::from(""));
+    lines.push(String::from("[templates]"));
+    lines.push(format!("linux = \"{}\"", cfg.template_linux));
+    lines.push(format!("macos = \"{}\"", cfg.template_macos));
+    lines.push(String::from(""));
+    lines.push(String::from("[naming]"));
+    lines.push(format!("default_template = \"{}\"", cfg.naming_template));
+    lines.push(format!("rand_len = {}", cfg.naming_rand_len));
+    lines.push(format!("max_retries = {}", cfg.naming_max_retries));
+    lines.push(String::from(""));
+    lines.push(String::from("[output]"));
+    lines.push(format!("default_json = {}", cfg.json));
+    lines.push(format!("default_quiet = {}", cfg.quiet));
+
+    lines.join("\n") + "\n"
 }
 
 fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
@@ -146,7 +155,7 @@ fn merge_file_config(cfg: &mut EffectiveConfig, path: &PathBuf) -> Result<()> {
         cfg.utm_app = v;
     }
     if let Some(v) = parsed.utmctl_path {
-        cfg.utmctl_path = v;
+        cfg.utmctl_path = Some(v);
     }
     if let Some(v) = parsed.state_path {
         cfg.state_path = PathBuf::from(v);
@@ -193,7 +202,7 @@ fn merge_env_config(cfg: &mut EffectiveConfig) {
         cfg.utm_app = v;
     }
     if let Ok(v) = std::env::var("UTMD_UTMCTL_PATH") {
-        cfg.utmctl_path = v;
+        cfg.utmctl_path = Some(v);
     }
     if let Ok(v) = std::env::var("UTMD_STATE_PATH") {
         cfg.state_path = PathBuf::from(v);
