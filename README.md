@@ -5,22 +5,35 @@
 [![GitHub Release](https://img.shields.io/github/v/release/tappunk/utmd?color=orange)](https://github.com/tappunk/utmd/releases)
 [![X Follow](https://img.shields.io/twitter/follow/tappunk?style=social)](https://x.com/tappunk)
 
-# utmd (experimental)
+# utmd
 
-**Disposable VM sandbox manager for UTM on macOS.** Create, run, and prune isolated development environments.
+**Disposable VM sandbox manager for UTM on macOS.** Create, run, and prune isolated development environments. A personal tool for my own workflow, not a product. Expect breaking changes and best-effort maintenance.
 
-[Installation](#installation) • [Quick Start](#quick-start) • [Usage](#usage) • [Config](#config) • [JSON Output](#json-output)
+[Installation](#installation) • [Prerequisites](#prerequisites) • [Quick Start](#quick-start) • [Usage](#usage) • [Config](#config) • [JSON Output](#json-output)
 
 ## Features
 
-- **Template-based cloning** — create VMs from base templates (`[t]-linux`, `[t]-macos`)
-- **Disposable lifecycle** — `create` → `run` → `rm` for one-off sandboxes, `prune` for batch cleanup
-- **Smart naming** — exact names, templates with `{prefix}{os}-{rand}`, or prefix + OS combinations
-- **Batch pruning** — filter by prefix, OS, or age (`--older-than 24h`, `--older-than 7d`)
-- **Machine readable** — JSON output for all commands, designed for automation and agent pipelines
-- **Non-destructive** — only removes `utmd-` prefixed VMs, leaves personal VMs untouched
-- **Dry run support** — `--dry-run` previews actions without mutating state
-- **Global automation flags** — `--json`, `--quiet`, `--yes`, `--dry-run`, `--config`
+- **Template-based cloning**: create VMs by cloning base templates (`[t]-linux`, `[t]-macos`)
+- **Disposable lifecycle**: one-off sandboxes via `create` → `run` → `rm`, batch cleanup via `prune`
+- **Flexible naming**: default template `{prefix}{os}-{rand}`, custom templates using `{prefix}`, `{os}`, `{date}`, `{time}`, `{rand}`, or exact names with `--name`
+- **Batch pruning**: filter by prefix, OS, or age (`--older-than 24h`)
+- **JSON output**: every command emits the same wrapper shape, ready for scripting
+- **Safe by default**: `prune` only touches `utmd-` prefixed VMs unless you pass a different `--prefix`
+- **Dry run**: `--dry-run` previews actions without touching state
+- **Global flags**: `--json`, `--quiet`, `--yes`, `--dry-run`, `--config`
+
+## Prerequisites
+
+- macOS with **UTM Desktop** installed (default `/Applications/UTM.app`). `utmd` drives UTM through `utmctl`, the CLI embedded in the app. No separate `utmctl` install needed.
+- A **GUI login session**. `utmctl` drives the UTM app via AppleScript, which needs a GUI session, so it fails over SSH, in cron, or before a user logs in.
+
+`utmd` resolves `utmctl` in this order (first hit wins):
+
+1. Explicit `utmctl_path` in config or `UTMD_UTMCTL_PATH`
+2. `utmctl` on `PATH`
+3. Fallbacks: `/Applications/UTM.app/Contents/MacOS/utmctl`, `/opt/homebrew/bin/utmctl`, `/usr/local/bin/utmctl`, `~/Applications/UTM.app/Contents/MacOS/utmctl`
+
+utmd canonicalizes the resolved path (symlinks followed) and rejects it unless it ends with `UTM.app/Contents/MacOS/utmctl`, so the app-embedded binary is the only one it will run.
 
 ## Installation
 
@@ -95,18 +108,12 @@ utmd --yes prune                       # Skip confirmation prompts
 
 ## Config
 
-Create the config file with `utmd init`:
-
-```bash
-utmd init
-```
-
-Default config path: `~/.config/utmd/config.toml`
+`utmd init` writes a boilerplate config to `~/.config/utmd/config.toml` (override the location with `--config`):
 
 ```toml
 utm_app = "/Applications/UTM.app"
-utmctl_path = "/opt/homebrew/bin/utmctl"
-state_path = "/Users/user/Library/Application Support/utmd/state.json"
+#utmctl_path = "/Applications/UTM.app/Contents/MacOS/utmctl"
+state_path = "/Users/user/.config/utmd/state.json"
 default_prefix = "utmd-"
 
 [templates]
@@ -125,7 +132,7 @@ default_quiet = false
 
 ### Environment variables
 
-Environment variables override config values. Precedence: **CLI flags > environment > config file > built-in defaults**.
+Precedence: **CLI flags > environment > config file > built-in defaults**.
 
 ```bash
 UTMD_UTM_APP
@@ -152,4 +159,4 @@ All commands return wrapped JSON with a stable top-level shape:
 }
 ```
 
-Use `--json` to force JSON output. On first run, `utmd` checks for the `utmctl` dependency and reports an error if it is missing.
+Use `--json` to force JSON output. Before any command runs, `utmd` resolves `utmctl` (see [Prerequisites](#prerequisites)) and exits with a diagnostic if it cannot find it.
