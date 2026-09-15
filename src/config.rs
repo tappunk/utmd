@@ -132,11 +132,11 @@ fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
         return Some(PathBuf::from(path));
     }
 
-    dirs::config_dir().map(|dir| dir.join("utmd").join("config.toml"))
+    cli_config_dir().map(|dir| dir.join("utmd").join("config.toml"))
 }
 
 fn default_config_path() -> PathBuf {
-    if let Some(dir) = dirs::config_dir() {
+    if let Some(dir) = cli_config_dir() {
         return dir.join("utmd").join("config.toml");
     }
 
@@ -242,13 +242,16 @@ fn validate(cfg: &EffectiveConfig) -> Result<()> {
 }
 
 fn default_state_path() -> PathBuf {
-    if let Some(dir) = dirs::state_dir() {
-        return dir.join("utmd").join("state.json");
-    }
-
-    if let Some(dir) = dirs::config_dir() {
+    if let Some(dir) = cli_config_dir() {
         return dir.join("utmd").join("state.json");
     }
 
     PathBuf::from("/tmp/utmd-state.json")
+}
+
+fn cli_config_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
 }
