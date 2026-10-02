@@ -28,7 +28,9 @@ fn run_with_timeout(mut cmd: Command, label: &'static str, timeout_secs: u64) ->
 
     let mut child = match cmd.spawn() {
         Ok(child) => child,
-        Err(e) => bail!("spawn failed: {}", e),
+        Err(e) => {
+            bail!("spawn failed: {}", e);
+        }
     };
 
     let stdout_handle = std::thread::spawn({
@@ -75,7 +77,9 @@ fn run_with_timeout(mut cmd: Command, label: &'static str, timeout_secs: u64) ->
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
-            Err(e) => bail!("wait error: {}", e),
+            Err(e) => {
+                bail!("wait error: {}", e);
+            }
         }
     }
 }
@@ -114,7 +118,7 @@ pub fn resolve_utmctl(cfg: &EffectiveConfig) -> Result<PathBuf> {
 
     bail!(
         "utmctl not found: no explicit utmctl_path, not on PATH, and no UTM.app install found in standard locations. Set utmctl_path or UTMD_UTMCTL_PATH to the path of a utmctl binary inside UTM.app"
-    )
+    );
 }
 
 fn fallback_utmctl_paths() -> Vec<PathBuf> {
@@ -384,7 +388,7 @@ mod tests {
 
     #[test]
     fn accepts_home_app_path() {
-        let path = Path::new("/Users/tappunk/Applications/UTM.app/Contents/MacOS/utmctl");
+        let path = Path::new("/Users/someone/Applications/UTM.app/Contents/MacOS/utmctl");
         assert!(is_utmctl_path(path));
     }
 

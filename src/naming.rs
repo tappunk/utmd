@@ -40,7 +40,7 @@ pub fn generate_name(
     bail!(
         "failed to generate unique vm name after {} retries",
         naming_max_retries
-    )
+    );
 }
 
 fn render_template(template: &str, prefix: &str, os: OsType, rand_len: usize) -> String {
