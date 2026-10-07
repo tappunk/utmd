@@ -249,9 +249,13 @@ fn default_state_path() -> PathBuf {
     PathBuf::from("/tmp/utmd-state.json")
 }
 
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
 fn cli_config_dir() -> Option<PathBuf> {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
-        .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
+        .or_else(|| home_dir().map(|h| h.join(".config")))
 }

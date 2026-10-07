@@ -1,4 +1,4 @@
-use crate::config::EffectiveConfig;
+use crate::config::{EffectiveConfig, home_dir};
 use crate::models::VmInfo;
 use crate::output::Reporter;
 use color_eyre::{Result, eyre::WrapErr, eyre::bail, eyre::eyre};
@@ -127,7 +127,7 @@ fn fallback_utmctl_paths() -> Vec<PathBuf> {
         PathBuf::from("/opt/homebrew/bin/utmctl"),
         PathBuf::from("/usr/local/bin/utmctl"),
     ];
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = home_dir() {
         paths.push(home.join("Applications/UTM.app/Contents/MacOS/utmctl"));
     }
     paths
